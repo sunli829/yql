@@ -1,0 +1,14 @@
+[package]
+name = "yql-dataset"
+version = "0.1.0"
+authors = ["Sunli <scott_s829@163.com>"]
+edition = "2018"
+
+[dependencies]
+yql-array = { path = "../array" }
+
+comfy-table = "2.1.0"
+anyhow = "1.0.40"
+serde = { version = "1.0.125", features = ["derive"] }
+chrono = "0.4.19"
+chrono-tz = "0.5.3"

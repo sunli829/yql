@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "libs/array",
+    "libs/expr",
+    "libs/dataset",
+    "libs/planner"
+]
