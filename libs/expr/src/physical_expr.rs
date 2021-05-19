@@ -14,24 +14,24 @@ pub enum PhysicalFunction {
 }
 
 #[derive(Clone)]
-pub enum PhysicalOp {
+pub enum PhysicalNode {
     Literal(Literal),
     Column {
         index: usize,
     },
     Binary {
         op: BinaryOperator,
-        lhs: Box<PhysicalOp>,
-        rhs: Box<PhysicalOp>,
+        lhs: Box<PhysicalNode>,
+        rhs: Box<PhysicalNode>,
     },
     Unary {
         op: UnaryOperator,
-        expr: Box<PhysicalOp>,
+        expr: Box<PhysicalNode>,
     },
     Call {
         input_data_types: Vec<DataType>,
         func: PhysicalFunction,
-        args: Vec<PhysicalOp>,
+        args: Vec<PhysicalNode>,
     },
 }
 
@@ -42,7 +42,7 @@ pub struct ExprState {
 
 #[derive(Clone)]
 pub struct PhysicalExpr {
-    pub(crate) root: PhysicalOp,
+    pub(crate) root: PhysicalNode,
     pub(crate) data_type: DataType,
     pub(crate) stateful_funcs: Vec<Box<dyn StatefulFunction>>,
 }
@@ -82,23 +82,23 @@ impl PhysicalExpr {
 
 #[inline]
 fn internal_eval(
-    op: &mut PhysicalOp,
+    op: &mut PhysicalNode,
     stateful_funcs: &mut [Box<dyn StatefulFunction>],
     dataset: &DataSet,
 ) -> Result<ArrayRef> {
     match op {
-        PhysicalOp::Literal(literal) => Ok(literal.to_array(dataset.len())),
-        PhysicalOp::Column { index } => Ok(dataset.column(*index).context("internal error")?),
-        PhysicalOp::Binary { op, lhs, rhs } => {
+        PhysicalNode::Literal(literal) => Ok(literal.to_array(dataset.len())),
+        PhysicalNode::Column { index } => Ok(dataset.column(*index).context("internal error")?),
+        PhysicalNode::Binary { op, lhs, rhs } => {
             let left = internal_eval(lhs, stateful_funcs, dataset)?;
             let right = internal_eval(rhs, stateful_funcs, dataset)?;
             op.eval_array(&*left, &*right)
         }
-        PhysicalOp::Unary { op, expr } => {
+        PhysicalNode::Unary { op, expr } => {
             let array = internal_eval(expr, stateful_funcs, dataset)?;
             op.eval_array(&*array)
         }
-        PhysicalOp::Call {
+        PhysicalNode::Call {
             input_data_types,
             func,
             args,

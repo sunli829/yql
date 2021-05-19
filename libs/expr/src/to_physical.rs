@@ -6,7 +6,7 @@ use yql_dataset::SchemaRef;
 
 use crate::func::{FunctionType, StatefulFunction};
 use crate::funcs::FUNCS;
-use crate::physical_expr::{PhysicalFunction, PhysicalOp};
+use crate::physical_expr::{PhysicalFunction, PhysicalNode};
 
 pub type Result<T, E = Error> = std::result::Result<(T, DataType), E>;
 
@@ -15,14 +15,14 @@ struct Context {
     stateful_funcs: Vec<Box<dyn StatefulFunction>>,
 }
 
-fn to_physical(ctx: &mut Context, expr: Expr) -> Result<PhysicalOp> {
+fn to_physical(ctx: &mut Context, expr: Expr) -> Result<PhysicalNode> {
     match expr {
         Expr::Literal(literal) => {
             let data_type = literal.data_type();
-            Ok((PhysicalOp::Literal(literal), data_type))
+            Ok((PhysicalNode::Literal(literal), data_type))
         }
         Expr::Column { qualifier, name } => match ctx.schema.field(qualifier.as_deref(), &name) {
-            Some((index, field)) => Ok((PhysicalOp::Column { index }, field.data_type)),
+            Some((index, field)) => Ok((PhysicalNode::Column { index }, field.data_type)),
             None => match qualifier {
                 Some(qualifier) => anyhow::bail!("not such column: '{}.{}'", qualifier, name),
                 None => anyhow::bail!("not such column: '{}'", name),
@@ -33,7 +33,7 @@ fn to_physical(ctx: &mut Context, expr: Expr) -> Result<PhysicalOp> {
             let (rhs, rhs_data_type) = to_physical(ctx, *rhs)?;
             let data_type = op.data_type(lhs_data_type, rhs_data_type)?;
             Ok((
-                PhysicalOp::Binary {
+                PhysicalNode::Binary {
                     op,
                     lhs: Box::new(lhs),
                     rhs: Box::new(rhs),
@@ -45,7 +45,7 @@ fn to_physical(ctx: &mut Context, expr: Expr) -> Result<PhysicalOp> {
             let (expr, data_type) = to_physical(ctx, *expr)?;
             let data_type = op.data_type(data_type)?;
             Ok((
-                PhysicalOp::Unary {
+                PhysicalNode::Unary {
                     op,
                     expr: Box::new(expr),
                 },
@@ -78,7 +78,7 @@ fn to_physical(ctx: &mut Context, expr: Expr) -> Result<PhysicalOp> {
                 .map_err(|_| anyhow::anyhow!("misuse function: {}", func.name))?;
             let return_data_type = (func.return_type)(&input_data_types);
 
-            let call = PhysicalOp::Call {
+            let call = PhysicalNode::Call {
                 input_data_types,
                 func: match &func.function_type {
                     FunctionType::Stateless(f) => PhysicalFunction::Stateless(*f),

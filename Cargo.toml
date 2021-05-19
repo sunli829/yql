@@ -3,5 +3,6 @@ members = [
     "libs/array",
     "libs/expr",
     "libs/dataset",
-    "libs/planner"
+    "libs/planner",
+    "libs/core",
 ]

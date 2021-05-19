@@ -88,6 +88,12 @@ impl DataType {
         matches!(self, DataType::String)
     }
 
+    /// Returns `true` if this type is a timestamp type.
+    #[inline]
+    pub fn is_timestamp(&self) -> bool {
+        matches!(self, DataType::Timestamp(_))
+    }
+
     /// Returns `true` if this type can be cast to `to` type.
     #[inline]
     pub fn can_cast_to(&self, to: Self) -> bool {
