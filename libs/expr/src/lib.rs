@@ -13,5 +13,5 @@ mod unary_operator;
 pub use binary_operator::BinaryOperator;
 pub use expr::Expr;
 pub use literal::Literal;
-pub use physical_expr::PhysicalExpr;
+pub use physical_expr::{ExprState, PhysicalExpr};
 pub use unary_operator::UnaryOperator;

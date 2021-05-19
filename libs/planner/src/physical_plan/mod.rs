@@ -30,24 +30,7 @@ impl PhysicalNode {
 }
 
 pub struct PhysicalPlan {
-    pub(crate) root: PhysicalNode,
-    pub(crate) source_count: usize,
-    pub(crate) node_count: usize,
-}
-
-impl PhysicalPlan {
-    #[inline]
-    fn root(&self) -> &PhysicalNode {
-        &self.root
-    }
-
-    #[inline]
-    fn source_count(&self) -> usize {
-        self.source_count
-    }
-
-    #[inline]
-    fn node_count(&self) -> usize {
-        self.node_count
-    }
+    pub root: PhysicalNode,
+    pub source_count: usize,
+    pub node_count: usize,
 }

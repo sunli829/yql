@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 use yql_array::{ArrayRef, DataType};
 use yql_dataset::DataSet;
 
@@ -35,10 +34,7 @@ pub enum PhysicalNode {
     },
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct ExprState {
-    data: Vec<u8>,
-}
+pub type ExprState = Vec<u8>;
 
 #[derive(Clone)]
 pub struct PhysicalExpr {
@@ -63,12 +59,11 @@ impl PhysicalExpr {
             let data = func.save_state()?;
             func_state.insert(id, data);
         }
-        let data = bincode::serialize(&func_state)?;
-        Ok(ExprState { data })
+        Ok(bincode::serialize(&func_state)?)
     }
 
     pub fn load_state(&mut self, state: ExprState) -> Result<()> {
-        let func_state: HashMap<usize, Vec<u8>> = bincode::deserialize(&state.data)?;
+        let func_state: HashMap<usize, Vec<u8>> = bincode::deserialize(&state)?;
         for (id, data) in func_state {
             let func = self
                 .stateful_funcs

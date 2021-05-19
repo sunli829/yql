@@ -4,5 +4,5 @@ members = [
     "libs/expr",
     "libs/dataset",
     "libs/planner",
-    "libs/core",
+    "libs/stream",
 ]
