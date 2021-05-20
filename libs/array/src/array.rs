@@ -2,7 +2,10 @@ use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use crate::DataType;
+use crate::{
+    BooleanType, DataType, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type,
+    NullArray, PrimitiveArray, StringArray, TimestampType,
+};
 
 /// Trait for dealing with different types of array at runtime when the type of the array is not known in advance.
 pub trait Array: Debug + Send + Sync {
@@ -61,3 +64,36 @@ pub trait Array: Debug + Send + Sync {
 
 /// A reference-counted reference to a generic `Array`.
 pub type ArrayRef = Arc<dyn Array>;
+
+macro_rules! eq_primitive_array {
+    ($ty:ty, $left:expr, $right:expr) => {
+        $left.as_any().downcast_ref::<PrimitiveArray<$ty>>()
+            == $right.as_any().downcast_ref::<PrimitiveArray<$ty>>()
+    };
+}
+
+impl PartialEq for dyn Array {
+    fn eq(&self, other: &Self) -> bool {
+        if self.data_type() != self.data_type() {
+            return false;
+        }
+        match self.data_type() {
+            DataType::Null => {
+                self.as_any().downcast_ref::<NullArray>()
+                    == other.as_any().downcast_ref::<NullArray>()
+            }
+            DataType::Int8 => eq_primitive_array!(Int8Type, self, other),
+            DataType::Int16 => eq_primitive_array!(Int16Type, self, other),
+            DataType::Int32 => eq_primitive_array!(Int32Type, self, other),
+            DataType::Int64 => eq_primitive_array!(Int64Type, self, other),
+            DataType::Float32 => eq_primitive_array!(Float32Type, self, other),
+            DataType::Float64 => eq_primitive_array!(Float64Type, self, other),
+            DataType::Boolean => eq_primitive_array!(BooleanType, self, other),
+            DataType::Timestamp(_) => eq_primitive_array!(TimestampType, self, other),
+            DataType::String => {
+                self.as_any().downcast_ref::<StringArray>()
+                    == other.as_any().downcast_ref::<StringArray>()
+            }
+        }
+    }
+}

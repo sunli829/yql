@@ -11,7 +11,7 @@ use crate::logical_plan::{
 };
 use crate::physical_plan::{
     PhysicalAggregateNode, PhysicalFilterNode, PhysicalNode, PhysicalPlan, PhysicalProjectionNode,
-    PhysicalSourceNode,
+    PhysicalSourceNode, FIELD_WINDOW_TIME,
 };
 
 struct Context {
@@ -68,7 +68,7 @@ fn projection_to_physical(
     projection: LogicalProjectionPlan,
 ) -> Result<PhysicalNode> {
     let input = to_physical(ctx, *projection.input)?;
-    let (exprs, schema) = select_expr(projection.exprs, input.schema())?;
+    let (exprs, schema) = select_expr(projection.exprs, input.schema(), vec![])?;
     Ok(PhysicalNode::Projection(PhysicalProjectionNode {
         id: ctx.take_id(),
         schema,
@@ -106,8 +106,6 @@ fn aggregate_to_physical(
         .map(|expr| PhysicalExpr::try_new(input.schema(), expr))
         .try_collect()?;
 
-    let (aggr_exprs, schema) = select_expr(aggregate.aggr_exprs, input.schema())?;
-
     let time_expr = match aggregate.time_expr {
         Some(expr) => {
             let expr = PhysicalExpr::try_new(input_schema.clone(), expr)?;
@@ -132,6 +130,22 @@ fn aggregate_to_physical(
         None => None,
     };
 
+    let (aggr_exprs, schema) = select_expr(
+        aggregate.aggr_exprs,
+        input.schema(),
+        vec![Field {
+            qualifier: None,
+            name: FIELD_WINDOW_TIME.to_string(),
+            data_type: DataType::Timestamp(time_expr.as_ref().and_then(
+                |expr| match expr.data_type() {
+                    DataType::Timestamp(Some(tz)) => Some(tz),
+                    DataType::Timestamp(None) => None,
+                    _ => unreachable!(),
+                },
+            )),
+        }],
+    )?;
+
     Ok(PhysicalNode::Aggregate(PhysicalAggregateNode {
         id: ctx.take_id(),
         schema,
@@ -144,7 +158,11 @@ fn aggregate_to_physical(
     }))
 }
 
-fn select_expr(exprs: Vec<Expr>, schema: SchemaRef) -> Result<(Vec<PhysicalExpr>, SchemaRef)> {
+fn select_expr(
+    exprs: Vec<Expr>,
+    schema: SchemaRef,
+    extra_fields: Vec<Field>,
+) -> Result<(Vec<PhysicalExpr>, SchemaRef)> {
     let mut fields = Vec::new();
     let mut physical_exprs = Vec::new();
 
@@ -184,6 +202,7 @@ fn select_expr(exprs: Vec<Expr>, schema: SchemaRef) -> Result<(Vec<PhysicalExpr>
         }
     }
 
+    fields.extend(extra_fields);
     let new_schema = Arc::new(Schema::try_new(fields)?);
     Ok((physical_exprs, new_schema))
 }

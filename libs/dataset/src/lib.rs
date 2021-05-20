@@ -1,3 +1,4 @@
+mod csv_reader;
 mod dataset;
 mod display;
 mod schema;

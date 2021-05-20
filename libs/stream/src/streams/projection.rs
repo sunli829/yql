@@ -49,3 +49,15 @@ pub fn create_projection_stream(
         }
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use tokio::sync::broadcast;
+
+    #[test]
+    fn test_projection_stream() {
+        let mut ctx = CreateStreamContext::new_for_test();
+    }
+}

@@ -27,6 +27,18 @@ pub struct CreateStreamContext {
     pub prev_state: HashMap<usize, Vec<u8>>,
 }
 
+impl CreateStreamContext {
+    #[cfg(test)]
+    pub fn new_for_test() -> Self {
+        let (tx_barrier, _) = broadcast::channel(8);
+        CreateStreamContext {
+            config: Arc::new(Default::default()),
+            tx_barrier,
+            prev_state: Default::default(),
+        }
+    }
+}
+
 pub struct DataStream {
     config: StreamConfigRef,
     event_stream: EventStream,

@@ -75,3 +75,20 @@ impl DataSet {
         )
     }
 }
+
+impl PartialEq for DataSet {
+    fn eq(&self, other: &Self) -> bool {
+        if self.schema != other.schema {
+            return false;
+        }
+        if self.columns.len() != other.columns.len() {
+            return false;
+        }
+        for (a, b) in self.columns.iter().zip(&other.columns) {
+            if !a.as_ref().eq(b.as_ref()) {
+                return false;
+            }
+        }
+        true
+    }
+}

@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use ahash::AHashMap;
 use anyhow::Result;
@@ -7,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use tokio_stream::StreamExt;
 use yql_array::{
     ArrayExt, ArrayRef, BooleanType, DataType, Float32Type, Float64Type, Int16Type, Int32Type,
-    Int64Type, Int8Type, NullArray, PrimitiveBuilder, Scalar, StringBuilder, TimestampType,
+    Int64Type, Int8Type, NullArray, PrimitiveBuilder, Scalar, StringBuilder, TimestampArray,
+    TimestampType,
 };
 use yql_dataset::{DataSet, SchemaRef};
 use yql_expr::{ExprState, PhysicalExpr};
@@ -18,7 +20,6 @@ use crate::dataset::DataSetExt;
 use crate::dataset::GroupedKey;
 use crate::stream::{CreateStreamContext, Event, EventStream};
 use crate::streams::create_stream;
-use std::sync::Arc;
 
 macro_rules! append_primitive_value {
     ($columns:expr, $aggregate_states:expr, $index:expr, $ty:ty, $scalar_ty:ident) => {{
@@ -50,6 +51,7 @@ struct AggregateState {
 
 #[derive(Default)]
 struct WindowState {
+    start_time: i64,
     end_time: i64,
     children: AHashMap<GroupedKey, AggregateState>,
 }
@@ -76,6 +78,7 @@ impl AggregateManager {
 
         for (start, end, groups) in saved_state.windows {
             let mut window_state = WindowState {
+                start_time: start,
                 end_time: end,
                 children: Default::default(),
             };
@@ -133,8 +136,11 @@ impl AggregateManager {
         grouped_key: GroupedKey,
         dataset: &DataSet,
     ) -> Result<()> {
-        let window_state = self.windows.entry(start).or_default();
-        window_state.end_time = end;
+        let window_state = self.windows.entry(start).or_insert_with(|| WindowState {
+            start_time: start,
+            end_time: end,
+            children: Default::default(),
+        });
 
         let aggregate_state = match window_state.children.get_mut(&grouped_key) {
             Some(aggregate_state) => aggregate_state,
@@ -257,6 +263,10 @@ impl AggregateManager {
                 }
             }
 
+            columns.push(Arc::new(TimestampArray::new_scalar(
+                window.children.len(),
+                Some(window.start_time),
+            )));
             datasets.push(DataSet::try_new(self.schema.clone(), columns)?);
         }
 
