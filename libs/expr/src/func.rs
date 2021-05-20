@@ -63,6 +63,16 @@ pub enum FunctionType {
     Stateful(fn() -> Box<dyn StatefulFunction>),
 }
 
+impl FunctionType {
+    #[cfg(test)]
+    pub fn create_stateful_fun(&self) -> Box<dyn StatefulFunction> {
+        match self {
+            FunctionType::Stateless(_) => panic!("not a stateful function!"),
+            FunctionType::Stateful(f) => f(),
+        }
+    }
+}
+
 pub struct Function {
     pub name: &'static str,
     pub signature: &'static Signature,

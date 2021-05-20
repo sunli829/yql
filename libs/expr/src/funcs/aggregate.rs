@@ -283,3 +283,91 @@ pub const LAST: Function = Function {
         }))
     }),
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_unary_func(func: &Function, first: (Vec<f64>, Vec<f64>), second: (Vec<f64>, Vec<f64>)) {
+        let mut f = func.function_type.create_stateful_fun();
+        let array = f
+            .call(&[Arc::new(Float64Array::from_vec(first.0))])
+            .unwrap();
+        assert_eq!(
+            array
+                .downcast_ref::<Float64Array>()
+                .iter()
+                .collect::<Vec<_>>(),
+            first.1
+        );
+
+        let state = f.save_state().unwrap();
+        let mut f = func.function_type.create_stateful_fun();
+        f.load_state(state).unwrap();
+
+        let array = f
+            .call(&[Arc::new(Float64Array::from_vec(second.0))])
+            .unwrap();
+        assert_eq!(
+            array
+                .downcast_ref::<Float64Array>()
+                .iter()
+                .collect::<Vec<_>>(),
+            second.1
+        );
+    }
+
+    #[test]
+    fn test_avg() {
+        test_unary_func(
+            &AVG,
+            (vec![1.0, 2.0, 3.0], vec![1.0, 1.5, 2.0]),
+            (vec![4.0, 5.0, 6.0], vec![2.5, 3.0, 3.5]),
+        );
+    }
+
+    #[test]
+    fn test_sum() {
+        test_unary_func(
+            &SUM,
+            (vec![1.0, 2.0, 3.0], vec![1.0, 3.0, 6.0]),
+            (vec![4.0, 5.0, 6.0], vec![10.0, 15.0, 21.0]),
+        );
+    }
+
+    #[test]
+    fn test_max() {
+        test_unary_func(
+            &MAX,
+            (vec![10.0, 5.0, 30.0], vec![10.0, 10.0, 30.0]),
+            (vec![7.0, 20.0, 35.0], vec![30.0, 30.0, 35.0]),
+        );
+    }
+
+    #[test]
+    fn test_min() {
+        test_unary_func(
+            &MIN,
+            (vec![10.0, 5.0, 30.0], vec![10.0, 5.0, 5.0]),
+            (vec![7.0, 3.0, 35.0], vec![5.0, 3.0, 3.0]),
+        );
+    }
+
+    #[test]
+    fn test_first() {
+        test_unary_func(
+            &FIRST,
+            (vec![10.0, 5.0, 30.0], vec![10.0, 10.0, 10.0]),
+            (vec![7.0, 3.0, 35.0], vec![10.0, 10.0, 10.0]),
+        );
+    }
+
+    #[test]
+    fn test_last() {
+        test_unary_func(
+            &LAST,
+            (vec![10.0, 5.0, 30.0], vec![10.0, 5.0, 30.0]),
+            (vec![7.0, 3.0, 35.0], vec![7.0, 3.0, 35.0]),
+        );
+    }
+}
