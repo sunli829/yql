@@ -75,17 +75,17 @@ impl Stream for DataStream {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
-            if let Poll::Ready(_) = self.checkpoint_interval.poll_tick(cx) {
-                if self.config.save_state_fn.is_some() {
-                    let barrier = Arc::new(CheckPointBarrier::new(
-                        self.node_count,
-                        self.source_count,
-                        false,
-                    ));
-                    let _ = self.tx_barrier.send(barrier.clone());
-                    let config = self.config.clone();
-                    tokio::spawn(save_state(config, barrier));
-                }
+            if self.checkpoint_interval.poll_tick(cx).is_ready()
+                && self.config.save_state_fn.is_some()
+            {
+                let barrier = Arc::new(CheckPointBarrier::new(
+                    self.node_count,
+                    self.source_count,
+                    false,
+                ));
+                let _ = self.tx_barrier.send(barrier.clone());
+                let config = self.config.clone();
+                tokio::spawn(save_state(config, barrier));
             }
 
             return match Pin::new(&mut self.event_stream).poll_next(cx) {

@@ -551,14 +551,14 @@ mod tests {
 
         let array_i32 = slice.downcast_ref::<Int32Array>();
         for x in 0..10 {
-            assert_eq!(array_i32.value_opt(x), Some(1 as i32));
+            assert_eq!(array_i32.value_opt(x), Some(1));
         }
 
         let slice = array.slice(990, 10);
         assert_eq!(slice.len(), 10);
         let array_i32 = slice.downcast_ref::<Int32Array>();
         for x in 990..1000 {
-            assert_eq!(array_i32.value_opt(x - 990), Some(1 as i32));
+            assert_eq!(array_i32.value_opt(x - 990), Some(1));
         }
     }
 
@@ -607,7 +607,7 @@ mod tests {
 
         let array_i32 = slice.downcast_ref::<Int32Array>();
         for x in 0..10 {
-            assert_eq!(array_i32.value_opt(x), Some(1 as i32));
+            assert_eq!(array_i32.value_opt(x), Some(1));
         }
     }
 

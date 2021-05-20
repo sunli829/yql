@@ -40,6 +40,7 @@ pub fn create_projection_stream(
                         let state_data = bincode::serialize(&state)?;
                         barrier.set_state(id, Some(state_data));
                     }
+                    yield Event::CreateCheckPoint(barrier.clone());
                     if barrier.is_exit() {
                         break;
                     }

@@ -62,6 +62,7 @@ impl<T: GenericSourceProvider> GenericSourceProvider for SourceProviderWrapper<T
         };
         let inner_stream = self.0.create_stream(state)?;
         let provider_name = self.provider_name();
+
         Ok(Box::pin(async_stream::try_stream! {
             tokio::pin!(inner_stream);
             while let Some(GenericSourceDataSet { state, dataset }) = inner_stream.next().await.transpose()? {

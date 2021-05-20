@@ -1,30 +1,25 @@
-use chrono::{DateTime, Duration, DurationRound};
-use chrono_tz::Tz;
-
 #[derive(Copy, Clone, PartialEq)]
 pub enum Window {
-    Fixed {
-        length: Duration,
-    },
-    Sliding {
-        length: Duration,
-        interval: Duration,
-    },
+    Fixed { length: i64 },
+    Sliding { length: i64, interval: i64 },
 }
 
 impl Window {
-    pub(crate) fn start_time(&self, time: DateTime<Tz>) -> DateTime<Tz> {
+    pub fn windows(self, timestamp: i64) -> Vec<(i64, i64)> {
         match self {
-            Window::Fixed { length } => time.duration_trunc(*length).unwrap(),
-            Window::Sliding { interval, .. } => time.duration_trunc(*interval).unwrap(),
-        }
-    }
-
-    pub(crate) fn end_time(&self, time: DateTime<Tz>) -> DateTime<Tz> {
-        match self {
-            Window::Fixed { length } => time.duration_trunc(*length).unwrap() + *length,
-            Window::Sliding { interval, length } => {
-                time.duration_trunc(*interval).unwrap() + *length
+            Window::Fixed { length } => {
+                let start = timestamp / length * length;
+                vec![(start, start + length)]
+            }
+            Window::Sliding { length, interval } => {
+                let mut windows = Vec::new();
+                let mut time = timestamp / interval * interval;
+                let end_time = time + length;
+                while time < end_time {
+                    windows.push((time, time + length));
+                    time += interval;
+                }
+                windows
             }
         }
     }

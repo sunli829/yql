@@ -8,6 +8,7 @@ edition = "2018"
 yql-planner = { path = "../planner" }
 yql-dataset = { path = "../dataset" }
 yql-array = { path = "../array" }
+yql-expr = { path = "../expr" }
 
 anyhow = "1.0.40"
 futures-util = "0.3.15"
@@ -18,4 +19,9 @@ tracing = "0.1.26"
 bincode = "1.3.3"
 async-stream = "0.3.1"
 itertools = "0.10.0"
-
+ahash = "0.7.2"
+smallvec = { version = "1.6.1", features = ["serde"] }
+ordered-float = { version = "2.1.1", features = ["serde"] }
+chrono = { version = "0.4.19", features = ["serde"] }
+chrono-tz = { version = "0.5.3", features = ["serde"] }
+serde = { version = "1.0.126", features = ["derive"] }

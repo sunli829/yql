@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use itertools::Itertools;
 use yql_array::DataType;
 use yql_dataset::{Field, Schema, SchemaRef};
 use yql_expr::{Expr, PhysicalExpr};
@@ -99,11 +100,11 @@ fn aggregate_to_physical(
     let input = to_physical(ctx, *aggregate.input)?;
     let input_schema = input.schema();
 
-    let mut group_exprs = Vec::new();
-    for expr in aggregate.group_exprs {
-        let expr = PhysicalExpr::try_new(input.schema(), expr)?;
-        group_exprs.push(expr);
-    }
+    let group_exprs = aggregate
+        .group_exprs
+        .into_iter()
+        .map(|expr| PhysicalExpr::try_new(input.schema(), expr))
+        .try_collect()?;
 
     let (aggr_exprs, schema) = select_expr(aggregate.aggr_exprs, input.schema())?;
 
@@ -121,7 +122,7 @@ fn aggregate_to_physical(
 
     let watermark_expr = match aggregate.watermark_expr {
         Some(expr) => {
-            let expr = PhysicalExpr::try_new(input_schema.clone(), expr)?;
+            let expr = PhysicalExpr::try_new(input_schema, expr)?;
             anyhow::ensure!(
                 expr.data_type().is_timestamp(),
                 "watermark requires a timestamp type."
@@ -137,7 +138,7 @@ fn aggregate_to_physical(
         group_exprs,
         aggr_exprs,
         window: aggregate.window,
-        time_expr: time_expr,
+        time_expr,
         watermark_expr,
         input: Box::new(input),
     }))

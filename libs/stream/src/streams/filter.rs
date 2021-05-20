@@ -32,6 +32,7 @@ pub fn create_filter_stream(
                     if !barrier.is_saved(id) {
                         barrier.set_state(id, Some(expr.save_state()?));
                     }
+                    yield Event::CreateCheckPoint(barrier.clone());
                     if barrier.is_exit() {
                         break;
                     }

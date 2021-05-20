@@ -1,5 +1,6 @@
 mod checkpoint;
 mod config;
+mod dataset;
 mod stream;
 mod streams;
 
