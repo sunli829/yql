@@ -1,10 +1,14 @@
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
+use tokio::sync::broadcast;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
+use tokio_stream::Stream;
 use yql_array::{ArrayExt, BooleanBuilder, TimestampArray};
 use yql_dataset::{DataSet, SchemaRef};
 use yql_expr::{ExprState, PhysicalExpr};
@@ -25,6 +29,22 @@ struct SavedState {
     source_state: Vec<u8>,
     time_expr: Option<ExprState>,
     watermark_expr: Option<ExprState>,
+}
+
+struct SourceStream {
+    id: usize,
+    schema: SchemaRef,
+    time_expr: Option<PhysicalExpr>,
+    watermark_expr: Option<PhysicalExpr>,
+    current_watermark: Option<i64>,
+    input: Pin<Box<dyn Stream<Item = Result<SourceDataSet>> + Send + 'static>>,
+    rx_barrier: broadcast::Receiver<Arc<CheckPointBarrier>>,
+}
+
+impl Stream for SourceStream {
+    type Item = Result<Event>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {}
 }
 
 pub fn create_source_stream(
@@ -55,6 +75,16 @@ pub fn create_source_stream(
     };
 
     let rx_barrier = ctx.tx_barrier.subscribe();
+
+    let stream = SourceStream {
+        id,
+        schema,
+        time_expr,
+        watermark_expr,
+        current_watermark,
+        input,
+        rx_barrier,
+    };
 
     let mut input = futures_util::stream::select(
         tokio_stream::wrappers::BroadcastStream::new(rx_barrier).map(Control::CheckPointBarrier),
