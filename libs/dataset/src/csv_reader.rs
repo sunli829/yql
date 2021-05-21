@@ -11,7 +11,7 @@ use csv::StringRecord;
 use once_cell::sync::Lazy;
 use regex::{Regex, RegexBuilder};
 use yql_array::{
-    BooleanBuilder, BooleanType, DataType, Float32Builder, Float32Type, Float64Builder,
+    ArrayRef, BooleanBuilder, BooleanType, DataType, Float32Builder, Float32Type, Float64Builder,
     Float64Type, Int16Builder, Int16Type, Int32Builder, Int32Type, Int64Builder, Int64Type,
     Int8Builder, Int8Type, NullArray, PrimitiveBuilder, PrimitiveType, StringBuilder,
     TimestampBuilder, TimestampType,
@@ -43,11 +43,7 @@ impl CsvOptions {
             .delimiter(self.delimiter)
             .has_headers(self.has_header)
             .from_reader(rdr);
-        CsvReader {
-            reader,
-            schema,
-            options: self,
-        }
+        CsvReader { reader, schema }
     }
 
     pub fn infer_schema_from_path(&self, path: impl AsRef<Path>) -> Result<SchemaRef> {
@@ -117,42 +113,25 @@ impl CsvOptions {
 pub struct CsvReader<R> {
     reader: csv::Reader<R>,
     schema: SchemaRef,
-    options: CsvOptions,
 }
 
 impl<R: Read> CsvReader<R> {
     pub fn read_batch(&mut self, batch_size: Option<usize>) -> Result<DataSet> {
-        let mut count = batch_size.unwrap_or(usize::MAX);
+        let mut total_count = batch_size.unwrap_or(usize::MAX);
         let mut batch_records = vec![StringRecord::new(); 100];
-        let mut builders = self
-            .schema
-            .fields()
-            .iter()
-            .map(|field| match field.data_type {
-                DataType::Null => Box::new(0usize) as Box<dyn Any>,
-                DataType::Int8 => Box::new(Int8Builder::default()) as Box<dyn Any>,
-                DataType::Int16 => Box::new(Int16Builder::default()) as Box<dyn Any>,
-                DataType::Int32 => Box::new(Int32Builder::default()) as Box<dyn Any>,
-                DataType::Int64 => Box::new(Int64Builder::default()) as Box<dyn Any>,
-                DataType::Float32 => Box::new(Float32Builder::default()) as Box<dyn Any>,
-                DataType::Float64 => Box::new(Float64Builder::default()) as Box<dyn Any>,
-                DataType::Boolean => Box::new(BooleanBuilder::default()) as Box<dyn Any>,
-                DataType::Timestamp(_) => Box::new(TimestampBuilder::default()) as Box<dyn Any>,
-                DataType::String => Box::new(StringBuilder::default()) as Box<dyn Any>,
-            })
-            .collect::<Vec<_>>();
+        let mut builders = create_builders(&self.schema);
 
-        while count > 0 {
-            let read_count = batch_records.len().min(count);
+        while total_count > 0 {
+            let read_count = batch_records.len().min(total_count);
             let count = self.read_batch_records(&mut batch_records[..read_count])?;
             if count == 0 {
                 break;
             }
+            total_count -= count;
             append_data(&self.schema, &mut builders, &batch_records[..count])?;
         }
 
-        todo!()
-        //DataSet::try_new(self.schema.clone(), columns)
+        create_dataset(self.schema.clone(), builders)
     }
 
     fn read_batch_records(&mut self, records: &mut [StringRecord]) -> Result<usize> {
@@ -191,6 +170,25 @@ fn infer_field_schema(string: &str) -> DataType {
     } else {
         DataType::String
     }
+}
+
+fn create_builders(schema: &Schema) -> Vec<Box<dyn Any>> {
+    schema
+        .fields()
+        .iter()
+        .map(|field| match field.data_type {
+            DataType::Null => Box::new(0usize) as Box<dyn Any>,
+            DataType::Int8 => Box::new(Int8Builder::default()) as Box<dyn Any>,
+            DataType::Int16 => Box::new(Int16Builder::default()) as Box<dyn Any>,
+            DataType::Int32 => Box::new(Int32Builder::default()) as Box<dyn Any>,
+            DataType::Int64 => Box::new(Int64Builder::default()) as Box<dyn Any>,
+            DataType::Float32 => Box::new(Float32Builder::default()) as Box<dyn Any>,
+            DataType::Float64 => Box::new(Float64Builder::default()) as Box<dyn Any>,
+            DataType::Boolean => Box::new(BooleanBuilder::default()) as Box<dyn Any>,
+            DataType::Timestamp(_) => Box::new(TimestampBuilder::default()) as Box<dyn Any>,
+            DataType::String => Box::new(StringBuilder::default()) as Box<dyn Any>,
+        })
+        .collect::<Vec<_>>()
 }
 
 macro_rules! append_value {
@@ -234,4 +232,35 @@ fn append_data(
     }
 
     Ok(())
+}
+
+macro_rules! create_array {
+    ($builder:expr, $ty:ty) => {{
+        let builder = *$builder.downcast::<PrimitiveBuilder<$ty>>().unwrap();
+        Arc::new(builder.finish())
+    }};
+}
+
+fn create_dataset(schema: SchemaRef, builders: Vec<Box<dyn Any>>) -> Result<DataSet> {
+    let mut columns = Vec::new();
+    for (field, builder) in schema.fields().iter().zip(builders) {
+        columns.push(match field.data_type {
+            DataType::Null => {
+                Arc::new(NullArray::new(*builder.downcast_ref::<usize>().unwrap())) as ArrayRef
+            }
+            DataType::Int8 => create_array!(builder, Int8Type),
+            DataType::Int16 => create_array!(builder, Int16Type),
+            DataType::Int32 => create_array!(builder, Int32Type),
+            DataType::Int64 => create_array!(builder, Int64Type),
+            DataType::Float32 => create_array!(builder, Float32Type),
+            DataType::Float64 => create_array!(builder, Float64Type),
+            DataType::Boolean => create_array!(builder, BooleanType),
+            DataType::Timestamp(_) => create_array!(builder, TimestampType),
+            DataType::String => {
+                let builder = *builder.downcast::<StringBuilder>().unwrap();
+                Arc::new(builder.finish())
+            }
+        });
+    }
+    DataSet::try_new(schema, columns)
 }

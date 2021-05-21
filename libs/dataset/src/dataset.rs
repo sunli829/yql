@@ -1,7 +1,11 @@
+use std::fs::File;
+use std::io::{Cursor, Read};
+use std::path::Path;
+
 use anyhow::Result;
 use yql_array::{compute, ArrayRef, BooleanArray};
 
-use crate::SchemaRef;
+use crate::{CsvOptions, SchemaRef};
 
 #[derive(Debug, Clone)]
 pub struct DataSet {
@@ -26,6 +30,23 @@ impl DataSet {
         }
 
         Ok(Self { schema, columns })
+    }
+
+    pub fn from_csv<R: Read>(schema: SchemaRef, options: CsvOptions, rdr: R) -> Result<DataSet> {
+        let mut reader = options.open(schema, rdr);
+        reader.read_batch(None)
+    }
+
+    pub fn from_csv_file(
+        schema: SchemaRef,
+        options: CsvOptions,
+        path: impl AsRef<Path>,
+    ) -> Result<DataSet> {
+        Self::from_csv(schema, options, File::open(path)?)
+    }
+
+    pub fn from_csv_slice(schema: SchemaRef, options: CsvOptions, data: &[u8]) -> Result<DataSet> {
+        Self::from_csv(schema, options, Cursor::new(data))
     }
 
     #[inline]
