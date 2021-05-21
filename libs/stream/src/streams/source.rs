@@ -1,10 +1,14 @@
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::Stream;
 use yql_array::{ArrayExt, BooleanBuilder, TimestampArray};
 use yql_dataset::{DataSet, SchemaRef};
 use yql_expr::{ExprState, PhysicalExpr};
@@ -25,6 +29,29 @@ struct SavedState {
     source_state: Vec<u8>,
     time_expr: Option<ExprState>,
     watermark_expr: Option<ExprState>,
+}
+
+struct CombinedStream {
+    rx_barrier: BroadcastStream<Arc<CheckPointBarrier>>,
+    input: Pin<Box<dyn Stream<Item = Result<SourceDataSet>> + Send + 'static>>,
+}
+
+impl Stream for CombinedStream {
+    type Item = Control;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match Pin::new(&mut self.rx_barrier).poll_next(cx) {
+            Poll::Ready(Some(item)) => return Poll::Ready(Some(Control::CheckPointBarrier(item))),
+            Poll::Ready(None) => return Poll::Ready(None),
+            Poll::Pending => {}
+        }
+
+        match Pin::new(&mut self.input).poll_next(cx) {
+            Poll::Ready(Some(item)) => Poll::Ready(Some(Control::DataSet(item))),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
+    }
 }
 
 pub fn create_source_stream(
@@ -55,11 +82,10 @@ pub fn create_source_stream(
     };
 
     let rx_barrier = ctx.tx_barrier.subscribe();
-
-    let mut input = futures_util::stream::select(
-        tokio_stream::wrappers::BroadcastStream::new(rx_barrier).map(Control::CheckPointBarrier),
-        input.map(Control::DataSet),
-    );
+    let mut input = CombinedStream {
+        rx_barrier: BroadcastStream::new(rx_barrier),
+        input,
+    };
 
     Ok(Box::pin(async_stream::try_stream! {
         let mut current_state = None;

@@ -38,6 +38,7 @@ impl SourceCsv {
     }
 }
 
+#[allow(clippy::type_complexity)]
 impl GenericSourceProvider for SourceCsv {
     type State = usize;
     type Stream =
