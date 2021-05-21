@@ -26,13 +26,13 @@ pub fn create_projection_stream(
     Ok(Box::pin(async_stream::try_stream! {
         while let Some(event) = input.next().await.transpose()? {
             match event {
-                Event::DataSet(dataset) => {
+                Event::DataSet { current_watermark, dataset } => {
                     let mut columns = Vec::with_capacity(exprs.len());
                     for expr in &mut exprs {
                         columns.push(expr.eval(&dataset)?);
                     }
                     let result_dataset = DataSet::try_new(schema.clone(), columns)?;
-                    yield Event::DataSet(result_dataset);
+                    yield Event::DataSet { current_watermark, dataset: result_dataset };
                 }
                 Event::CreateCheckPoint(barrier) => {
                     if !barrier.is_saved(id) {
@@ -48,16 +48,4 @@ pub fn create_projection_stream(
             }
         }
     }))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Arc;
-    use tokio::sync::broadcast;
-
-    #[test]
-    fn test_projection_stream() {
-        let mut ctx = CreateStreamContext::new_for_test();
-    }
 }

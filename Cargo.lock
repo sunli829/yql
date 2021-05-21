@@ -830,6 +830,13 @@ dependencies = [
 [[package]]
 name = "yql-source-csv"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "tokio-stream",
+ "yql-dataset",
+ "yql-planner",
+]
 
 [[package]]
 name = "yql-stream"
@@ -854,4 +861,5 @@ dependencies = [
  "yql-dataset",
  "yql-expr",
  "yql-planner",
+ "yql-source-csv",
 ]

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::{self, Debug, Formatter};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -15,8 +16,27 @@ use crate::checkpoint::CheckPointBarrier;
 use crate::StreamConfigRef;
 
 pub enum Event {
-    DataSet(DataSet),
+    DataSet {
+        current_watermark: Option<i64>,
+        dataset: DataSet,
+    },
     CreateCheckPoint(Arc<CheckPointBarrier>),
+}
+
+impl Debug for Event {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Event::DataSet {
+                current_watermark,
+                dataset,
+            } => f
+                .debug_struct("DataSet")
+                .field("current_watermark", current_watermark)
+                .field("dataset", dataset)
+                .finish(),
+            Event::CreateCheckPoint(_) => f.debug_struct("CreateCheckPoint").finish(),
+        }
+    }
 }
 
 pub type EventStream = Pin<Box<dyn Stream<Item = Result<Event>> + Send + 'static>>;
@@ -101,7 +121,9 @@ impl Stream for DataStream {
             }
 
             return match Pin::new(&mut self.event_stream).poll_next(cx) {
-                Poll::Ready(Some(Ok(Event::DataSet(dataset)))) => Poll::Ready(Some(Ok(dataset))),
+                Poll::Ready(Some(Ok(Event::DataSet { dataset, .. }))) => {
+                    Poll::Ready(Some(Ok(dataset)))
+                }
                 Poll::Ready(Some(Ok(_))) => continue,
                 Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
                 Poll::Ready(None) => Poll::Ready(None),

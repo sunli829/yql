@@ -11,7 +11,7 @@ use crate::logical_plan::{
 };
 use crate::physical_plan::{
     PhysicalAggregateNode, PhysicalFilterNode, PhysicalNode, PhysicalPlan, PhysicalProjectionNode,
-    PhysicalSourceNode, FIELD_WINDOW_TIME,
+    PhysicalSourceNode, FIELD_TIME,
 };
 
 struct Context {
@@ -43,13 +43,17 @@ fn to_physical(ctx: &mut Context, plan: LogicalPlan) -> Result<PhysicalNode> {
 }
 
 fn source_to_physical(ctx: &mut Context, source: LogicalSourcePlan) -> Result<PhysicalNode> {
+    let source_schema = source.provider.schema()?;
     let schema = Arc::new(Schema::try_new(
-        source
-            .provider
-            .schema()?
+        source_schema
             .fields()
             .to_vec()
             .into_iter()
+            .chain(std::iter::once(Field {
+                qualifier: None,
+                name: FIELD_TIME.to_string(),
+                data_type: DataType::Null,
+            }))
             .map(|mut field| {
                 field.qualifier = source.qualifier.clone();
                 field
@@ -60,6 +64,14 @@ fn source_to_physical(ctx: &mut Context, source: LogicalSourcePlan) -> Result<Ph
         id: ctx.take_id(),
         schema,
         provider: source.provider.clone(),
+        time_expr: match source.time_expr {
+            Some(expr) => Some(PhysicalExpr::try_new(source_schema.clone(), expr)?),
+            None => None,
+        },
+        watermark_expr: match source.watermark_expr {
+            Some(expr) => Some(PhysicalExpr::try_new(source_schema, expr)?),
+            None => None,
+        },
     }))
 }
 
@@ -68,7 +80,7 @@ fn projection_to_physical(
     projection: LogicalProjectionPlan,
 ) -> Result<PhysicalNode> {
     let input = to_physical(ctx, *projection.input)?;
-    let (exprs, schema) = select_expr(projection.exprs, input.schema(), vec![])?;
+    let (exprs, schema) = select_expr(projection.exprs, input.schema())?;
     Ok(PhysicalNode::Projection(PhysicalProjectionNode {
         id: ctx.take_id(),
         schema,
@@ -98,53 +110,17 @@ fn aggregate_to_physical(
     aggregate: LogicalAggregatePlan,
 ) -> Result<PhysicalNode> {
     let input = to_physical(ctx, *aggregate.input)?;
-    let input_schema = input.schema();
+    let time_idx = match input.schema().field(None, FIELD_TIME) {
+        Some((idx, field)) if field.data_type.is_timestamp() => idx,
+        _ => anyhow::bail!("A column whose name is '@time' and type is 'timestamp' is required to perform aggregation operations."),
+    };
 
     let group_exprs = aggregate
         .group_exprs
         .into_iter()
         .map(|expr| PhysicalExpr::try_new(input.schema(), expr))
         .try_collect()?;
-
-    let time_expr = match aggregate.time_expr {
-        Some(expr) => {
-            let expr = PhysicalExpr::try_new(input_schema.clone(), expr)?;
-            anyhow::ensure!(
-                expr.data_type().is_timestamp(),
-                "window time requires a timestamp type."
-            );
-            Some(expr)
-        }
-        None => None,
-    };
-
-    let watermark_expr = match aggregate.watermark_expr {
-        Some(expr) => {
-            let expr = PhysicalExpr::try_new(input_schema, expr)?;
-            anyhow::ensure!(
-                expr.data_type().is_timestamp(),
-                "watermark requires a timestamp type."
-            );
-            Some(expr)
-        }
-        None => None,
-    };
-
-    let (aggr_exprs, schema) = select_expr(
-        aggregate.aggr_exprs,
-        input.schema(),
-        vec![Field {
-            qualifier: None,
-            name: FIELD_WINDOW_TIME.to_string(),
-            data_type: DataType::Timestamp(time_expr.as_ref().and_then(
-                |expr| match expr.data_type() {
-                    DataType::Timestamp(Some(tz)) => Some(tz),
-                    DataType::Timestamp(None) => None,
-                    _ => unreachable!(),
-                },
-            )),
-        }],
-    )?;
+    let (aggr_exprs, schema) = select_expr(aggregate.aggr_exprs, input.schema())?;
 
     Ok(PhysicalNode::Aggregate(PhysicalAggregateNode {
         id: ctx.take_id(),
@@ -152,17 +128,12 @@ fn aggregate_to_physical(
         group_exprs,
         aggr_exprs,
         window: aggregate.window,
-        time_expr,
-        watermark_expr,
+        time_idx,
         input: Box::new(input),
     }))
 }
 
-fn select_expr(
-    exprs: Vec<Expr>,
-    schema: SchemaRef,
-    extra_fields: Vec<Field>,
-) -> Result<(Vec<PhysicalExpr>, SchemaRef)> {
+fn select_expr(exprs: Vec<Expr>, schema: SchemaRef) -> Result<(Vec<PhysicalExpr>, SchemaRef)> {
     let mut fields = Vec::new();
     let mut physical_exprs = Vec::new();
 
@@ -202,7 +173,6 @@ fn select_expr(
         }
     }
 
-    fields.extend(extra_fields);
     let new_schema = Arc::new(Schema::try_new(fields)?);
     Ok((physical_exprs, new_schema))
 }

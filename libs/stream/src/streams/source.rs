@@ -1,8 +1,13 @@
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use futures_util::StreamExt;
+use serde::{Deserialize, Serialize};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
+use yql_array::{ArrayExt, BooleanBuilder, TimestampArray};
+use yql_dataset::{DataSet, SchemaRef};
+use yql_expr::{ExprState, PhysicalExpr};
 use yql_planner::physical_plan::PhysicalSourceNode;
 use yql_planner::SourceDataSet;
 
@@ -14,15 +19,42 @@ enum Control {
     DataSet(Result<SourceDataSet>),
 }
 
+#[derive(Serialize, Deserialize)]
+struct SavedState {
+    current_watermark: Option<i64>,
+    source_state: Vec<u8>,
+    time_expr: Option<ExprState>,
+    watermark_expr: Option<ExprState>,
+}
+
 pub fn create_source_stream(
     ctx: &mut CreateStreamContext,
     node: PhysicalSourceNode,
 ) -> Result<EventStream> {
-    let input = node
-        .provider
-        .create_stream(ctx.prev_state.remove(&node.id))?;
+    let PhysicalSourceNode {
+        id,
+        schema,
+        provider,
+        mut time_expr,
+        mut watermark_expr,
+    } = node;
+
+    let (input, mut current_watermark) = if let Some(data) = ctx.prev_state.remove(&node.id) {
+        let saved_state: SavedState = bincode::deserialize(&data)?;
+        let input = provider.create_stream(Some(saved_state.source_state))?;
+        if let (Some(expr), Some(data)) = (&mut time_expr, saved_state.time_expr) {
+            expr.load_state(data)?;
+        }
+        if let (Some(expr), Some(data)) = (&mut watermark_expr, saved_state.watermark_expr) {
+            expr.load_state(data)?;
+        }
+        let current_watermark = saved_state.current_watermark;
+        (input, current_watermark)
+    } else {
+        (provider.create_stream(None)?, None)
+    };
+
     let rx_barrier = ctx.tx_barrier.subscribe();
-    let id = node.id;
 
     let mut input = futures_util::stream::select(
         tokio_stream::wrappers::BroadcastStream::new(rx_barrier).map(Control::CheckPointBarrier),
@@ -34,18 +66,161 @@ pub fn create_source_stream(
         while let Some(control) = input.next().await {
             match control {
                 Control::CheckPointBarrier(res) => {
-                    if let Ok(barrier) = res {
+                    if let (Ok(barrier), Some(current_state)) = (res, current_state.clone()) {
                         let _ = barrier.source_barrier().wait().await;
-                        barrier.set_state(id, current_state.clone());
+                        let time_expr_state = match &time_expr {
+                            Some(expr) => Some(expr.save_state()?),
+                            None => None,
+                        };
+                        let watermark_expr_state = match &watermark_expr {
+                            Some(expr) => Some(expr.save_state()?),
+                            None => None,
+                        };
+                        let saved_data = bincode::serialize(&SavedState {
+                            current_watermark,
+                            source_state: current_state,
+                            time_expr: time_expr_state,
+                            watermark_expr: watermark_expr_state,
+                        })?;
+                        barrier.set_state(id, Some(saved_data));
                         yield Event::CreateCheckPoint(barrier);
                     }
                 }
                 Control::DataSet(item) => {
                     let SourceDataSet { state, dataset } = item?;
                     current_state = Some(state);
-                    yield Event::DataSet(dataset);
+                    let new_dataset = process_dataset(
+                        schema.clone(),
+                        &dataset,
+                        time_expr.as_mut(),
+                        watermark_expr.as_mut(),
+                        &mut current_watermark,
+                    )?;
+                    yield Event::DataSet {
+                        current_watermark,
+                        dataset: new_dataset,
+                    };
                 },
             }
         }
     }))
+}
+
+fn process_dataset(
+    schema: SchemaRef,
+    dataset: &DataSet,
+    time_expr: Option<&mut PhysicalExpr>,
+    watermark_expr: Option<&mut PhysicalExpr>,
+    current_watermark: &mut Option<i64>,
+) -> Result<DataSet> {
+    let times_array = match time_expr {
+        Some(expr) => expr.eval(dataset)?,
+        None => {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as i64;
+            Arc::new(TimestampArray::new_scalar(dataset.len(), Some(now)))
+        }
+    };
+    let watermarks_array = match watermark_expr {
+        Some(expr) => expr.eval(dataset)?,
+        None => times_array.clone(),
+    };
+
+    let times = times_array.downcast_ref::<TimestampArray>();
+    let watermarks = watermarks_array.downcast_ref::<TimestampArray>();
+    let mut flags = BooleanBuilder::default();
+
+    for (time, watermark) in times.iter_opt().zip(watermarks.iter_opt()) {
+        if let Some(time) = time {
+            let watermark = watermark.unwrap_or(time);
+
+            // update watermark
+            let current_watermark = match current_watermark {
+                Some(current_watermark) => {
+                    if watermark > *current_watermark {
+                        *current_watermark = watermark;
+                        watermark
+                    } else {
+                        *current_watermark
+                    }
+                }
+                None => {
+                    *current_watermark = Some(watermark);
+                    watermark
+                }
+            };
+
+            flags.append(time >= current_watermark);
+        } else {
+            flags.append(false);
+        }
+    }
+
+    let new_dataset = DataSet::try_new(
+        schema,
+        dataset
+            .columns()
+            .iter()
+            .cloned()
+            .chain(std::iter::once(times_array))
+            .collect(),
+    )?;
+    new_dataset.filter(&flags.finish())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use yql_array::DataType;
+    use yql_dataset::{CsvOptions, Field, Schema};
+    use yql_planner::SourceProviderWrapper;
+    use yql_source_csv::SourceCsv;
+
+    #[tokio::test]
+    async fn test_projection_stream() {
+        let mut ctx = CreateStreamContext::new_for_test();
+        let schema = Arc::new(
+            Schema::try_new(vec![
+                Field::new("a", DataType::Int32),
+                Field::new("b", DataType::Int32),
+            ])
+            .unwrap(),
+        );
+
+        let source_provider = SourceCsv::new(
+            CsvOptions {
+                has_header: true,
+                ..Default::default()
+            },
+            Some(schema),
+            "tests/test.csv",
+        )
+        .unwrap()
+        .with_batch_size(10);
+
+        let mut source = create_source_stream(
+            &mut ctx,
+            PhysicalSourceNode {
+                id: 1,
+                schema: Arc::new(
+                    Schema::try_new(vec![
+                        Field::new("a", DataType::Int32),
+                        Field::new("b", DataType::Int32),
+                        Field::new("@time", DataType::Timestamp(None)),
+                    ])
+                    .unwrap(),
+                ),
+                provider: Arc::new(SourceProviderWrapper(source_provider)),
+                time_expr: None,
+                watermark_expr: None,
+            },
+        )
+        .unwrap();
+
+        while let Some(event) = source.next().await {
+            println!("{:?}", event);
+        }
+    }
 }

@@ -21,11 +21,11 @@ pub fn create_filter_stream(
     Ok(Box::pin(async_stream::try_stream! {
         while let Some(event) = input.next().await.transpose()? {
             match event {
-                Event::DataSet(dataset) => {
+                Event::DataSet{ current_watermark, dataset } => {
                     let array = expr.eval(&dataset)?;
                     let result_dataset = dataset.filter(array.downcast_ref::<BooleanArray>())?;
                     if !result_dataset.is_empty() {
-                        yield Event::DataSet(result_dataset);
+                        yield Event::DataSet { current_watermark, dataset: result_dataset };
                     }
                 }
                 Event::CreateCheckPoint(barrier) => {

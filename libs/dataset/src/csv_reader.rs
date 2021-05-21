@@ -7,7 +7,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Result;
-use csv::StringRecord;
+use csv::{ByteRecord, StringRecord};
 use once_cell::sync::Lazy;
 use regex::{Regex, RegexBuilder};
 use yql_array::{
@@ -34,11 +34,11 @@ impl Default for CsvOptions {
 }
 
 impl CsvOptions {
-    pub fn open_path(self, schema: SchemaRef, path: impl AsRef<Path>) -> Result<CsvReader<File>> {
+    pub fn open_path(&self, schema: SchemaRef, path: impl AsRef<Path>) -> Result<CsvReader<File>> {
         Ok(self.open(schema, File::open(path)?))
     }
 
-    pub fn open<R: Read>(self, schema: SchemaRef, rdr: R) -> CsvReader<R> {
+    pub fn open<R: Read>(&self, schema: SchemaRef, rdr: R) -> CsvReader<R> {
         let reader = csv::ReaderBuilder::new()
             .delimiter(self.delimiter)
             .has_headers(self.has_header)
@@ -145,6 +145,14 @@ impl<R: Read> CsvReader<R> {
         }
 
         Ok(num_records)
+    }
+
+    pub fn skip(&mut self, count: usize) -> Result<()> {
+        let mut record = ByteRecord::new();
+        for _ in 0..count {
+            self.reader.read_byte_record(&mut record)?;
+        }
+        Ok(())
     }
 }
 

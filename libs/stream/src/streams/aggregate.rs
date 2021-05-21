@@ -39,7 +39,6 @@ type SavedWindow = (i64, i64, Vec<(GroupedKey, Vec<ExprState>, Vec<Scalar>)>);
 
 #[derive(Serialize, Deserialize)]
 struct SavedState {
-    watermark: Option<i64>,
     group_exprs: Vec<ExprState>,
     windows: Vec<SavedWindow>,
 }
@@ -61,16 +60,13 @@ pub struct AggregateManager {
     group_exprs: Vec<PhysicalExpr>,
     aggr_exprs: Vec<PhysicalExpr>,
     window: Window,
-    time_expr: Option<PhysicalExpr>,
-    watermark_expr: Option<PhysicalExpr>,
+    time_idx: usize,
     windows: BTreeMap<i64, WindowState>,
-    current_watermark: Option<i64>,
 }
 
 impl AggregateManager {
     fn load_state(&mut self, data: Vec<u8>) -> Result<()> {
         let saved_state: SavedState = bincode::deserialize(&data)?;
-        self.current_watermark = saved_state.watermark;
 
         for (expr, data) in self.group_exprs.iter_mut().zip(saved_state.group_exprs) {
             expr.load_state(data)?;
@@ -122,7 +118,6 @@ impl AggregateManager {
         }
 
         let saved_state = SavedState {
-            watermark: self.current_watermark,
             group_exprs,
             windows,
         };
@@ -164,15 +159,14 @@ impl AggregateManager {
         Ok(())
     }
 
-    fn aggregate(&mut self, dataset: &DataSet) -> Result<Vec<DataSet>> {
+    fn aggregate(
+        &mut self,
+        dataset: &DataSet,
+        current_watermark: Option<i64>,
+    ) -> Result<Vec<DataSet>> {
         let mut datasets = Vec::new();
 
-        for item in dataset.group_by_window(
-            self.time_expr.as_mut(),
-            self.watermark_expr.as_mut(),
-            &mut self.current_watermark,
-            &self.window,
-        )? {
+        for item in dataset.group_by_window(self.time_idx, &self.window)? {
             let (start, end, dataset) = item?;
 
             for item in dataset.group_by_exprs(&mut self.group_exprs)? {
@@ -182,7 +176,7 @@ impl AggregateManager {
         }
 
         let mut completed_windows = Vec::new();
-        if let Some(current_watermark) = self.current_watermark {
+        if let Some(current_watermark) = current_watermark {
             while let Some((start, window)) = self.windows.iter().next() {
                 if current_watermark > window.end_time {
                     let start = *start;
@@ -284,8 +278,7 @@ pub fn create_aggregate_stream(
         group_exprs,
         aggr_exprs,
         window,
-        time_expr,
-        watermark_expr,
+        time_idx,
         input,
     } = node;
     let mut manager = AggregateManager {
@@ -293,10 +286,8 @@ pub fn create_aggregate_stream(
         group_exprs,
         aggr_exprs,
         window,
-        time_expr,
-        watermark_expr,
+        time_idx,
         windows: Default::default(),
-        current_watermark: None,
     };
     if let Some(prev_state) = ctx.prev_state.remove(&id) {
         manager.load_state(prev_state)?;
@@ -307,9 +298,9 @@ pub fn create_aggregate_stream(
     Ok(Box::pin(async_stream::try_stream! {
         while let Some(event) = input.next().await.transpose()? {
             match event {
-                Event::DataSet(dataset) => {
-                    for dataset in manager.aggregate(&dataset)? {
-                        yield Event::DataSet(dataset);
+                Event::DataSet{ current_watermark, dataset } => {
+                    for dataset in manager.aggregate(&dataset, current_watermark)? {
+                        yield Event::DataSet{ current_watermark, dataset };
                     }
                 }
                 Event::CreateCheckPoint(barrier) => {

@@ -10,7 +10,6 @@ pub struct PhysicalAggregateNode {
     pub group_exprs: Vec<PhysicalExpr>,
     pub aggr_exprs: Vec<PhysicalExpr>,
     pub window: Window,
-    pub time_expr: Option<PhysicalExpr>,
-    pub watermark_expr: Option<PhysicalExpr>,
+    pub time_idx: usize,
     pub input: Box<PhysicalNode>,
 }

@@ -11,7 +11,7 @@ pub use filter::PhysicalFilterNode;
 pub use projection::PhysicalProjectionNode;
 pub use source::PhysicalSourceNode;
 
-pub const FIELD_WINDOW_TIME: &str = "@window_time";
+pub const FIELD_TIME: &str = "@time";
 
 pub enum PhysicalNode {
     Source(PhysicalSourceNode),

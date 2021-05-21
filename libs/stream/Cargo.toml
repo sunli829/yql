@@ -25,3 +25,6 @@ ordered-float = { version = "2.1.1", features = ["serde"] }
 chrono = { version = "0.4.19", features = ["serde"] }
 chrono-tz = { version = "0.5.3", features = ["serde"] }
 serde = { version = "1.0.126", features = ["derive"] }
+
+[dev-dependencies]
+yql-source-csv = { path = "../source-csv" }

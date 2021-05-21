@@ -6,7 +6,6 @@ use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::time::{SystemTime, UNIX_EPOCH};
 use yql_array::{
     Array, ArrayExt, ArrayRef, BooleanArray, BooleanType, DataType, Float32Type, Float64Type,
     Int16Type, Int32Type, Int64Type, Int8Type, NullArray, PrimitiveArray, PrimitiveBuilder,
@@ -136,54 +135,13 @@ pub type GroupByWindowIter<'a> = Box<dyn Iterator<Item = Result<(i64, i64, DataS
 
 pub fn group_by_window<'a>(
     dataset: &'a DataSet,
-    time_expr: Option<&mut PhysicalExpr>,
-    watermark_expr: Option<&mut PhysicalExpr>,
-    current_watermark: &mut Option<i64>,
+    time_idx: usize,
     window: &Window,
 ) -> Result<GroupByWindowIter<'a>> {
     let mut windows: AHashMap<_, (i64, Vec<usize>)> = AHashMap::new();
-
-    let times = match time_expr {
-        Some(expr) => expr.eval(dataset)?,
-        None => {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as i64;
-            Arc::new(TimestampArray::new_scalar(dataset.len(), Some(now)))
-        }
-    };
-    let watermarks = match watermark_expr {
-        Some(expr) => expr.eval(dataset)?,
-        None => times.clone(),
-    };
-
+    let times = dataset.column(time_idx).unwrap();
     let times = times.downcast_ref::<TimestampArray>();
-    let watermarks = watermarks.downcast_ref::<TimestampArray>();
-
-    for (idx, timestamp, watermark) in times
-        .iter_opt()
-        .zip(watermarks.iter_opt())
-        .enumerate()
-        .filter_map(|(idx, (timestamp, watermark))| {
-            timestamp.map(|timestamp| (idx, timestamp, watermark))
-        })
-    {
-        let watermark = watermark.unwrap_or(timestamp);
-
-        // update watermark
-        match current_watermark {
-            Some(current_watermark) => {
-                if watermark < *current_watermark {
-                    continue;
-                }
-                *current_watermark = watermark;
-            }
-            None => {
-                *current_watermark = Some(watermark);
-            }
-        }
-
+    for (idx, timestamp) in times.iter().enumerate() {
         for (start, end) in window.windows(timestamp) {
             let window = windows.entry(start).or_default();
             window.0 = end;

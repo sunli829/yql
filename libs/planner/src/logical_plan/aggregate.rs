@@ -8,6 +8,4 @@ pub struct LogicalAggregatePlan {
     pub group_exprs: Vec<Expr>,
     pub aggr_exprs: Vec<Expr>,
     pub window: Window,
-    pub time_expr: Option<Expr>,
-    pub watermark_expr: Option<Expr>,
 }
