@@ -14,7 +14,10 @@ use yql_dataset::Field;
 use yql_expr::{BinaryOperator, Expr, Literal, UnaryOperator};
 use yql_planner::Window;
 
-use crate::ast::{GroupBy, Select, Source, SourceFrom, Stmt, StmtCreateSource, StmtCreateStream};
+use crate::ast::{
+    GroupBy, OutputFormat, Select, Source, SourceFrom, Stmt, StmtCreateSink, StmtCreateSource,
+    StmtCreateStream,
+};
 
 fn sp(input: &str) -> IResult<&str, ()> {
     fold_many0(value((), one_of(" \t\n\r")), (), |_, _| ())(input)
@@ -503,6 +506,42 @@ fn stmt_create_stream(input: &str) -> IResult<&str, StmtCreateStream> {
                 name,
                 select,
                 to,
+            },
+        ),
+    )(input)
+}
+
+fn output_format(input: &str) -> IResult<&str, OutputFormat> {
+    context(
+        "output_format",
+        value(OutputFormat::Json, tag_no_case("json")),
+    )(input)
+}
+
+fn stmt_create_sink(input: &str) -> IResult<&str, StmtCreateSink> {
+    let format = map(
+        tuple((tag_no_case("format"), sp, output_format)),
+        |(_, _, format)| format,
+    );
+
+    context(
+        "stmt_create_sink",
+        map(
+            tuple((
+                tag_no_case("create"),
+                sp,
+                tag_no_case("sink"),
+                sp,
+                name,
+                tag_no_case("with"),
+                string,
+                sp,
+                opt(format),
+            )),
+            |(_, _, _, _, name, _, uri, _, format)| StmtCreateSink {
+                name,
+                uri,
+                format: format.unwrap_or_default(),
             },
         ),
     )(input)

@@ -45,9 +45,15 @@ pub struct StmtCreateSource {
     pub watermark: Option<Expr>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum OutputFormat {
     Json,
+}
+
+impl Default for OutputFormat {
+    fn default() -> Self {
+        OutputFormat::Json
+    }
 }
 
 #[derive(Debug, PartialEq)]
