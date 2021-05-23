@@ -1,4 +1,4 @@
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Window {
     Fixed { length: i64 },
     Sliding { length: i64, interval: i64 },

@@ -34,6 +34,7 @@ impl SourceCsv {
     }
 
     pub fn with_batch_size(self, batch_size: usize) -> Self {
+        assert!(batch_size > 0);
         Self { batch_size, ..self }
     }
 }

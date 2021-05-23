@@ -5,6 +5,7 @@ members = [
     "libs/dataset",
     "libs/planner",
     "libs/stream",
+    "libs/sql",
 
     "libs/source-csv",
 ]

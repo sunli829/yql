@@ -4,11 +4,10 @@ use std::task::{Context, Poll};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
-use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
-use tokio_stream::Stream;
+use tokio_stream::{Stream, StreamExt};
 use yql_array::{ArrayExt, BooleanBuilder, TimestampArray};
 use yql_dataset::{DataSet, SchemaRef};
 use yql_expr::{ExprState, PhysicalExpr};
@@ -194,59 +193,4 @@ fn process_dataset(
             .collect(),
     )?;
     new_dataset.filter(&flags.finish())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use yql_array::DataType;
-    use yql_dataset::{CsvOptions, Field, Schema};
-    use yql_planner::SourceProviderWrapper;
-    use yql_source_csv::SourceCsv;
-
-    #[tokio::test]
-    async fn test_projection_stream() {
-        let mut ctx = CreateStreamContext::new_for_test();
-        let schema = Arc::new(
-            Schema::try_new(vec![
-                Field::new("a", DataType::Int32),
-                Field::new("b", DataType::Int32),
-            ])
-            .unwrap(),
-        );
-
-        let source_provider = SourceCsv::new(
-            CsvOptions {
-                has_header: true,
-                ..Default::default()
-            },
-            Some(schema),
-            "tests/test.csv",
-        )
-        .unwrap()
-        .with_batch_size(10);
-
-        let mut source = create_source_stream(
-            &mut ctx,
-            PhysicalSourceNode {
-                id: 1,
-                schema: Arc::new(
-                    Schema::try_new(vec![
-                        Field::new("a", DataType::Int32),
-                        Field::new("b", DataType::Int32),
-                        Field::new("@time", DataType::Timestamp(None)),
-                    ])
-                    .unwrap(),
-                ),
-                provider: Arc::new(SourceProviderWrapper(source_provider)),
-                time_expr: None,
-                watermark_expr: None,
-            },
-        )
-        .unwrap();
-
-        while let Some(event) = source.next().await {
-            println!("{:?}", event);
-        }
-    }
 }
