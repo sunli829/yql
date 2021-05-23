@@ -14,7 +14,7 @@ use yql_dataset::Field;
 use yql_expr::{BinaryOperator, Expr, Literal, UnaryOperator};
 use yql_planner::Window;
 
-use crate::ast::{GroupBy, Select, Source, SourceFrom, StmtCreateSource};
+use crate::ast::{GroupBy, Select, Source, SourceFrom, Stmt, StmtCreateSource, StmtCreateStream};
 
 fn sp(input: &str) -> IResult<&str, ()> {
     fold_many0(value((), one_of(" \t\n\r")), (), |_, _| ())(input)
@@ -438,6 +438,14 @@ fn stmt_create_source(input: &str) -> IResult<&str, StmtCreateSource> {
         name,
         data_type,
     });
+    let time_by = map(
+        tuple((tag_no_case("time"), sp, tag_no_case("by"), sp, expr)),
+        |(_, _, _, _, expr)| expr,
+    );
+    let watermark_by = map(
+        tuple((tag_no_case("watermark"), sp, tag_no_case("by"), sp, expr)),
+        |(_, _, _, _, expr)| expr,
+    );
 
     context(
         "stmt_create_source",
@@ -449,24 +457,64 @@ fn stmt_create_source(input: &str) -> IResult<&str, StmtCreateSource> {
                 sp,
                 name,
                 sp,
-                char('('),
-                sp,
-                separated_list0(char(','), delimited(sp, field, sp)),
-                sp,
-                char(')'),
+                delimited(
+                    char('('),
+                    separated_list0(char(','), delimited(sp, field, sp)),
+                    char(')'),
+                ),
                 sp,
                 tag_no_case("with"),
                 sp,
                 string,
+                opt(delimited(sp, time_by, sp)),
+                opt(delimited(sp, watermark_by, sp)),
             )),
-            |(_, _, _, _, name, _, _, _, fields, _, _, _, _, _, uri)| StmtCreateSource {
+            |(_, _, _, _, name, _, fields, _, _, _, uri, time_by, watermark_by)| StmtCreateSource {
                 name,
                 uri,
                 fields,
-                time: None,
-                watermark: None,
+                time: time_by,
+                watermark: watermark_by,
             },
         ),
+    )(input)
+}
+
+fn stmt_create_stream(input: &str) -> IResult<&str, StmtCreateStream> {
+    context(
+        "stmt_create_stream",
+        map(
+            tuple((
+                tag_no_case("create"),
+                sp,
+                tag_no_case("stream"),
+                sp,
+                name,
+                sp,
+                tag_no_case("with"),
+                sp,
+                select,
+                sp,
+                tag_no_case("to"),
+                sp,
+                name,
+            )),
+            |(_, _, _, _, name, _, _, _, select, _, _, _, to)| StmtCreateStream {
+                name,
+                select,
+                to,
+            },
+        ),
+    )(input)
+}
+
+fn stmt(input: &str) -> IResult<&str, Stmt> {
+    context(
+        "stmt",
+        alt((
+            map(delimited(sp, stmt_create_source, sp), Stmt::CreateSource),
+            map(delimited(sp, stmt_create_stream, sp), Stmt::CreateStream),
+        )),
     )(input)
 }
 
@@ -850,6 +898,105 @@ mod tests {
                     watermark: None
                 }
             ))
+        );
+
+        assert_eq!(
+            stmt_create_source(
+                r#"create source a (
+            a int8,
+            b int16,
+            t timestamp,
+            t2 timestamp
+        ) with "csv:///test"
+        time by t
+        watermark by t2"#
+            ),
+            Ok((
+                "",
+                StmtCreateSource {
+                    name: "a".to_string(),
+                    uri: "csv:///test".to_string(),
+                    fields: vec![
+                        Field::new("a", DataType::Int8),
+                        Field::new("b", DataType::Int16),
+                        Field::new("t", DataType::Timestamp(None)),
+                        Field::new("t2", DataType::Timestamp(None)),
+                    ],
+                    time: Some(Expr::Column {
+                        qualifier: None,
+                        name: "t".to_string()
+                    }),
+                    watermark: Some(Expr::Column {
+                        qualifier: None,
+                        name: "t2".to_string()
+                    }),
+                }
+            ))
         )
+    }
+
+    #[test]
+    fn test_create_stream() {
+        assert_eq!(
+            stmt_create_stream(r#"create stream a with select a, b from abc to d"#),
+            Ok((
+                "",
+                StmtCreateStream {
+                    name: "a".to_string(),
+                    select: Select {
+                        projection: vec![
+                            Expr::Column {
+                                qualifier: None,
+                                name: "a".to_string()
+                            },
+                            Expr::Column {
+                                qualifier: None,
+                                name: "b".to_string()
+                            }
+                        ],
+                        source: Source {
+                            from: SourceFrom::Named("abc".to_string()),
+                            alias: None
+                        },
+                        where_clause: None,
+                        having_clause: None,
+                        group_clause: None,
+                        window: None
+                    },
+                    to: "d".to_string()
+                }
+            ))
+        );
+
+        assert_eq!(
+            stmt_create_stream(r#"create stream a with select a.a, a.b from abc as a to d"#),
+            Ok((
+                "",
+                StmtCreateStream {
+                    name: "a".to_string(),
+                    select: Select {
+                        projection: vec![
+                            Expr::Column {
+                                qualifier: Some("a".to_string()),
+                                name: "a".to_string()
+                            },
+                            Expr::Column {
+                                qualifier: Some("a".to_string()),
+                                name: "b".to_string()
+                            }
+                        ],
+                        source: Source {
+                            from: SourceFrom::Named("abc".to_string()),
+                            alias: Some("a".to_string())
+                        },
+                        where_clause: None,
+                        having_clause: None,
+                        group_clause: None,
+                        window: None
+                    },
+                    to: "d".to_string()
+                }
+            ))
+        );
     }
 }
