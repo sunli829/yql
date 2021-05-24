@@ -1,6 +1,6 @@
-use yql_dataset::Field;
-use yql_expr::Expr;
-use yql_planner::Window;
+use yql_core::dataset::Field;
+use yql_core::expr::Expr;
+use yql_core::Window;
 
 #[derive(Debug, PartialEq)]
 pub enum SourceFrom {

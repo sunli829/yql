@@ -9,10 +9,10 @@ use nom::error::context;
 use nom::multi::{fold_many0, many0, separated_list0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, separated_pair, tuple};
 use nom::IResult;
-use yql_array::DataType;
-use yql_dataset::Field;
-use yql_expr::{BinaryOperator, Expr, Literal, UnaryOperator};
-use yql_planner::Window;
+use yql_core::array::DataType;
+use yql_core::dataset::Field;
+use yql_core::expr::{BinaryOperator, Expr, Literal, UnaryOperator};
+use yql_core::Window;
 
 use crate::ast::{
     GroupBy, OutputFormat, Select, Source, SourceFrom, Stmt, StmtCreateSink, StmtCreateSource,
