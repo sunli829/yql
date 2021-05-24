@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::fmt::{self, Debug, Formatter};
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::{Context as _, Result};
+use futures_util::stream::BoxStream;
 use tokio::sync::broadcast;
 use tokio::time::Interval;
 use tokio_stream::Stream;
@@ -39,7 +41,7 @@ impl Debug for Event {
     }
 }
 
-pub type EventStream = Pin<Box<dyn Stream<Item = Result<Event>> + Send + 'static>>;
+pub type EventStream = BoxStream<'static, Result<Event>>;
 
 pub struct CreateStreamContext {
     pub config: StreamConfigRef,
@@ -58,6 +60,18 @@ pub struct DataStream {
 
 impl DataStream {
     pub fn try_new(config: StreamConfigRef, plan: LogicalPlan) -> Result<Self> {
+        Self::try_new_with_graceful_shutdown(
+            config,
+            plan,
+            Option::<futures_util::future::Pending<()>>::None,
+        )
+    }
+
+    pub fn try_new_with_graceful_shutdown(
+        config: StreamConfigRef,
+        plan: LogicalPlan,
+        signal: Option<impl Future<Output = ()> + Send + 'static>,
+    ) -> Result<Self> {
         let plan = PhysicalPlan::try_new(plan)?;
         let node_count = plan.node_count;
         let source_count = plan.source_count;
@@ -78,6 +92,17 @@ impl DataStream {
 
         let event_stream = crate::streams::create_stream(&mut ctx, plan.root)?;
         let checkpoint_interval = tokio::time::interval(config.checkpoint_interval);
+
+        if let Some(signal) = signal {
+            tokio::spawn({
+                let tx_barrier = tx_barrier.clone();
+                async move {
+                    signal.await;
+                    let barrier = Arc::new(CheckPointBarrier::new(node_count, source_count, true));
+                    let _ = tx_barrier.send(barrier);
+                }
+            });
+        }
 
         Ok(Self {
             config,

@@ -1,7 +1,7 @@
-use std::pin::Pin;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use futures_util::stream::BoxStream;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio_stream::{Stream, StreamExt};
@@ -27,17 +27,14 @@ pub trait GenericSourceProvider: Send + Sync + 'static {
 }
 
 pub type SourceProvider = Arc<
-    dyn GenericSourceProvider<
-        State = Vec<u8>,
-        Stream = Pin<Box<dyn Stream<Item = Result<SourceDataSet>> + Send + 'static>>,
-    >,
+    dyn GenericSourceProvider<State = Vec<u8>, Stream = BoxStream<'static, Result<SourceDataSet>>>,
 >;
 
 pub struct SourceProviderWrapper<T>(pub T);
 
 impl<T: GenericSourceProvider> GenericSourceProvider for SourceProviderWrapper<T> {
     type State = Vec<u8>;
-    type Stream = Pin<Box<dyn Stream<Item = Result<SourceDataSet>> + Send + 'static>>;
+    type Stream = BoxStream<'static, Result<SourceDataSet>>;
 
     fn provider_name(&self) -> &'static str {
         self.0.provider_name()
@@ -50,7 +47,7 @@ impl<T: GenericSourceProvider> GenericSourceProvider for SourceProviderWrapper<T
     fn create_stream(
         &self,
         state: Option<Self::State>,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<SourceDataSet>> + Send>>> {
+    ) -> Result<BoxStream<'static, Result<SourceDataSet>>> {
         let state = match state {
             Some(data) => Some(bincode::deserialize(&data).with_context(|| {
                 format!(

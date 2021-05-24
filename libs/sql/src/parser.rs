@@ -290,7 +290,7 @@ fn source_from(input: &str) -> IResult<&str, SourceFrom> {
                 tuple((char('('), sp, select, sp, char(')'))),
                 |(_, _, sub_query, _, _)| SourceFrom::SubQuery(Box::new(sub_query)),
             ),
-            map(name, |name| SourceFrom::Named(name)),
+            map(name, SourceFrom::Named),
         )),
     )(input)
 }
@@ -303,7 +303,7 @@ fn source(input: &str) -> IResult<&str, Source> {
                 tuple((source_from, sp, tag_no_case("as"), sp, name)),
                 |(from, _, _, _, alias)| Source {
                     from,
-                    alias: Some(alias.to_string()),
+                    alias: Some(alias),
                 },
             ),
             map(source_from, |from| Source { from, alias: None }),

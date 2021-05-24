@@ -4,6 +4,7 @@ use std::task::{Context, Poll};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
+use futures_util::stream::BoxStream;
 use serde::{Deserialize, Serialize};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
@@ -32,7 +33,7 @@ struct SavedState {
 
 struct CombinedStream {
     rx_barrier: BroadcastStream<Arc<CheckPointBarrier>>,
-    input: Pin<Box<dyn Stream<Item = Result<SourceDataSet>> + Send + 'static>>,
+    input: BoxStream<'static, Result<SourceDataSet>>,
 }
 
 impl Stream for CombinedStream {
