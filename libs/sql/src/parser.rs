@@ -16,7 +16,7 @@ use yql_planner::Window;
 
 use crate::ast::{
     GroupBy, OutputFormat, Select, Source, SourceFrom, Stmt, StmtCreateSink, StmtCreateSource,
-    StmtCreateStream,
+    StmtCreateStream, StmtDeleteSink, StmtDeleteSource, StmtDeleteStream,
 };
 
 fn sp(input: &str) -> IResult<&str, ()> {
@@ -533,12 +533,14 @@ fn stmt_create_sink(input: &str) -> IResult<&str, StmtCreateSink> {
                 tag_no_case("sink"),
                 sp,
                 name,
+                sp,
                 tag_no_case("with"),
+                sp,
                 string,
                 sp,
                 opt(format),
             )),
-            |(_, _, _, _, name, _, uri, _, format)| StmtCreateSink {
+            |(_, _, _, _, name, _, _, _, uri, _, format)| StmtCreateSink {
                 name,
                 uri,
                 format: format.unwrap_or_default(),
@@ -547,12 +549,46 @@ fn stmt_create_sink(input: &str) -> IResult<&str, StmtCreateSink> {
     )(input)
 }
 
-fn stmt(input: &str) -> IResult<&str, Stmt> {
+fn stmt_delete_source(input: &str) -> IResult<&str, StmtDeleteSource> {
+    context(
+        "stmt_delete_source",
+        map(
+            tuple((tag_no_case("delete"), sp, tag_no_case("source"), sp, name)),
+            |(_, _, _, _, name)| StmtDeleteSource { name },
+        ),
+    )(input)
+}
+
+fn stmt_delete_stream(input: &str) -> IResult<&str, StmtDeleteStream> {
+    context(
+        "stmt_delete_stream",
+        map(
+            tuple((tag_no_case("delete"), sp, tag_no_case("stream"), sp, name)),
+            |(_, _, _, _, name)| StmtDeleteStream { name },
+        ),
+    )(input)
+}
+
+fn stmt_delete_sink(input: &str) -> IResult<&str, StmtDeleteSink> {
+    context(
+        "stmt_delete_sink",
+        map(
+            tuple((tag_no_case("delete"), sp, tag_no_case("sink"), sp, name)),
+            |(_, _, _, _, name)| StmtDeleteSink { name },
+        ),
+    )(input)
+}
+
+pub fn stmt(input: &str) -> IResult<&str, Stmt> {
     context(
         "stmt",
         alt((
             map(delimited(sp, stmt_create_source, sp), Stmt::CreateSource),
             map(delimited(sp, stmt_create_stream, sp), Stmt::CreateStream),
+            map(delimited(sp, stmt_create_sink, sp), Stmt::CreateSink),
+            map(delimited(sp, stmt_delete_source, sp), Stmt::DeleteSource),
+            map(delimited(sp, stmt_delete_stream, sp), Stmt::DeleteStream),
+            map(delimited(sp, stmt_delete_sink, sp), Stmt::DeleteSink),
         )),
     )(input)
 }
@@ -1034,6 +1070,72 @@ mod tests {
                         window: None
                     },
                     to: "d".to_string()
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_create_sink() {
+        assert_eq!(
+            stmt_create_sink(r#"create sink a with "http://test""#),
+            Ok((
+                "",
+                StmtCreateSink {
+                    name: "a".to_string(),
+                    uri: "http://test".to_string(),
+                    format: OutputFormat::Json,
+                }
+            ))
+        );
+
+        assert_eq!(
+            stmt_create_sink(r#"create sink a with "http://test" format json"#),
+            Ok((
+                "",
+                StmtCreateSink {
+                    name: "a".to_string(),
+                    uri: "http://test".to_string(),
+                    format: OutputFormat::Json,
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_delete_source() {
+        assert_eq!(
+            stmt_delete_source(r#"delete source a"#),
+            Ok((
+                "",
+                StmtDeleteSource {
+                    name: "a".to_string(),
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_delete_stream() {
+        assert_eq!(
+            stmt_delete_stream(r#"delete stream a"#),
+            Ok((
+                "",
+                StmtDeleteStream {
+                    name: "a".to_string(),
+                }
+            ))
+        );
+    }
+
+    #[test]
+    fn test_delete_sink() {
+        assert_eq!(
+            stmt_delete_sink(r#"delete sink a"#),
+            Ok((
+                "",
+                StmtDeleteSink {
+                    name: "a".to_string(),
                 }
             ))
         );
