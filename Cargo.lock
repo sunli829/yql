@@ -1682,6 +1682,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "chrono-tz",
+ "nom 6.1.2",
  "parking_lot",
  "rocksdb",
  "serde",
