@@ -1,21 +1,20 @@
 use std::path::{Path, PathBuf};
-use std::pin::Pin;
 
 use anyhow::Result;
-use tokio_stream::Stream;
+use futures_util::stream::BoxStream;
 use yql_dataset::{CsvOptions, SchemaRef};
 use yql_planner::{GenericSourceDataSet, GenericSourceProvider};
 
 const DEFAULT_BATCH_SIZE: usize = 1000;
 
-pub struct SourceCsv {
+pub struct CsvSource {
     options: CsvOptions,
     schema: SchemaRef,
     batch_size: usize,
     path: PathBuf,
 }
 
-impl SourceCsv {
+impl CsvSource {
     pub fn new(
         options: CsvOptions,
         schema: Option<SchemaRef>,
@@ -40,10 +39,8 @@ impl SourceCsv {
 }
 
 #[allow(clippy::type_complexity)]
-impl GenericSourceProvider for SourceCsv {
+impl GenericSourceProvider for CsvSource {
     type State = usize;
-    type Stream =
-        Pin<Box<dyn Stream<Item = Result<GenericSourceDataSet<Self::State>>> + Send + 'static>>;
 
     fn provider_name(&self) -> &'static str {
         "csv"
@@ -53,7 +50,10 @@ impl GenericSourceProvider for SourceCsv {
         Ok(self.schema.clone())
     }
 
-    fn create_stream(&self, position: Option<Self::State>) -> Result<Self::Stream> {
+    fn create_stream(
+        &self,
+        position: Option<Self::State>,
+    ) -> Result<BoxStream<'static, Result<GenericSourceDataSet<Self::State>>>> {
         let mut reader = self.options.open_path(self.schema.clone(), &self.path)?;
         let mut position = if let Some(position) = position {
             reader.skip(position)?;

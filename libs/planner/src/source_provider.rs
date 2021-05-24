@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use futures_util::stream::BoxStream;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use tokio_stream::{Stream, StreamExt};
+use tokio_stream::StreamExt;
 use yql_dataset::{DataSet, SchemaRef};
 
 pub struct GenericSourceDataSet<T> {
@@ -17,24 +17,22 @@ pub type SourceDataSet = GenericSourceDataSet<Vec<u8>>;
 pub trait GenericSourceProvider: Send + Sync + 'static {
     type State: Send + Sync + Serialize + DeserializeOwned + 'static;
 
-    type Stream: Stream<Item = Result<GenericSourceDataSet<Self::State>>> + Send + 'static;
-
     fn provider_name(&self) -> &'static str;
 
     fn schema(&self) -> Result<SchemaRef>;
 
-    fn create_stream(&self, state: Option<Self::State>) -> Result<Self::Stream>;
+    fn create_stream(
+        &self,
+        state: Option<Self::State>,
+    ) -> Result<BoxStream<'static, Result<GenericSourceDataSet<Self::State>>>>;
 }
 
-pub type SourceProvider = Arc<
-    dyn GenericSourceProvider<State = Vec<u8>, Stream = BoxStream<'static, Result<SourceDataSet>>>,
->;
+pub type SourceProvider = Arc<dyn GenericSourceProvider<State = Vec<u8>>>;
 
 pub struct SourceProviderWrapper<T>(pub T);
 
 impl<T: GenericSourceProvider> GenericSourceProvider for SourceProviderWrapper<T> {
     type State = Vec<u8>;
-    type Stream = BoxStream<'static, Result<SourceDataSet>>;
 
     fn provider_name(&self) -> &'static str {
         self.0.provider_name()

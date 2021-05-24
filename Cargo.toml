@@ -8,4 +8,6 @@ members = [
     "libs/sql",
 
     "libs/source-csv",
+
+    "libs/sink-console",
 ]

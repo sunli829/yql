@@ -644,6 +644,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sink-console"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "yql-dataset",
+ "yql-planner",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -920,6 +930,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-stream",
+ "futures-util",
  "tokio-stream",
  "yql-dataset",
  "yql-planner",
