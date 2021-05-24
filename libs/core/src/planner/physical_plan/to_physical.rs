@@ -44,7 +44,7 @@ fn to_physical(ctx: &mut Context, plan: LogicalPlan) -> Result<PhysicalNode> {
 }
 
 fn source_to_physical(ctx: &mut Context, source: LogicalSourcePlan) -> Result<PhysicalNode> {
-    let source_schema = source.provider.schema()?;
+    let source_schema = source.source_provider.schema()?;
     let schema = Arc::new(Schema::try_new(
         source_schema
             .fields()
@@ -64,7 +64,7 @@ fn source_to_physical(ctx: &mut Context, source: LogicalSourcePlan) -> Result<Ph
     Ok(PhysicalNode::Source(PhysicalSourceNode {
         id: ctx.take_id(),
         schema,
-        provider: source.provider,
+        source_provider: source.source_provider,
         time_expr: match source.time_expr {
             Some(expr) => Some(expr.into_physical(source_schema.clone())?),
             None => None,

@@ -1,7 +1,6 @@
 pub mod dsl;
 
 use std::future::Future;
-use std::sync::Arc;
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
@@ -14,26 +13,33 @@ use crate::expr::Expr;
 use crate::planner::logical_plan::{
     LogicalAggregatePlan, LogicalFilterPlan, LogicalPlan, LogicalProjectionPlan, LogicalSourcePlan,
 };
-use crate::source_provider::SourceProviderWrapper;
-use crate::{ExecutionContext, GenericSourceProvider, SinkProvider, Window};
+use crate::sql::ast::Select;
+use crate::sql::SqlContext;
+use crate::{ExecutionContext, SinkProvider, SourceProvider, Window};
 
 pub struct DataFrame(LogicalPlan);
 
 impl DataFrame {
-    pub fn new<T: GenericSourceProvider>(
-        name: impl Into<String>,
-        source_provider: SourceProviderWrapper<T>,
+    pub fn new(
+        source_provider: SourceProvider,
         qualifier: Option<String>,
         time_expr: Option<Expr>,
         watermark_expr: Option<Expr>,
     ) -> Self {
         Self(LogicalPlan::Source(LogicalSourcePlan {
-            name: name.into(),
             qualifier,
-            provider: Arc::new(source_provider),
+            source_provider,
             time_expr,
             watermark_expr,
         }))
+    }
+
+    pub fn from_sql(ctx: &dyn SqlContext, sql: &str) -> Result<Self> {
+        crate::sql::planner::create_data_frame_with_sql(ctx, sql)
+    }
+
+    pub fn from_sql_select(ctx: &dyn SqlContext, select: Select) -> Result<Self> {
+        crate::sql::planner::create_data_frame(ctx, select)
     }
 
     pub fn select(self, exprs: Vec<Expr>) -> Self {
@@ -79,14 +85,14 @@ impl DataFrame {
         ctx: ExecutionContext,
         sink_provider: impl SinkProvider,
     ) -> Result<BoxFuture<'static, Result<()>>> {
-        self.into_task_graceful_shutdown(
+        self.into_task_with_graceful_shutdown(
             ctx,
             sink_provider,
             Option::<futures_util::future::Pending<()>>::None,
         )
     }
 
-    pub fn into_task_graceful_shutdown(
+    pub fn into_task_with_graceful_shutdown(
         self,
         ctx: ExecutionContext,
         sink_provider: impl SinkProvider,

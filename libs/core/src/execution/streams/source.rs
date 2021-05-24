@@ -62,7 +62,7 @@ pub fn create_source_stream(
     let PhysicalSourceNode {
         id,
         schema,
-        provider,
+        source_provider: provider,
         mut time_expr,
         mut watermark_expr,
     } = node;

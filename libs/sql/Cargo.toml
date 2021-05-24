@@ -9,3 +9,4 @@ yql-core = { path = "../core" }
 
 nom = "6.1.2"
 chrono-tz = "0.5.3"
+anyhow = "1.0.40"

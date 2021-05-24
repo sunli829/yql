@@ -1664,6 +1664,7 @@ dependencies = [
  "dyn-clone",
  "futures-util",
  "itertools",
+ "nom 6.1.2",
  "once_cell",
  "ordered-float",
  "parking_lot",
@@ -1686,14 +1687,5 @@ dependencies = [
  "serde",
  "tokio",
  "warp",
- "yql-core",
-]
-
-[[package]]
-name = "yql-sql"
-version = "0.1.0"
-dependencies = [
- "chrono-tz",
- "nom 6.1.2",
  "yql-core",
 ]

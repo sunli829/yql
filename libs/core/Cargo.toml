@@ -28,3 +28,4 @@ smallvec = { version = "1.6.1", features = ["serde"] }
 ordered-float = { version = "2.1.1", features = ["serde"] }
 parking_lot = "0.11.1"
 async-trait = "0.1.50"
+nom = "6.1.2"

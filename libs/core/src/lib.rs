@@ -3,6 +3,7 @@ pub mod dataset;
 pub mod expr;
 pub mod sinks;
 pub mod sources;
+pub mod sql;
 
 mod dataframe;
 mod execution;

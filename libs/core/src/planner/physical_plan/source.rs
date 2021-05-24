@@ -5,7 +5,7 @@ use crate::source_provider::SourceProvider;
 pub struct PhysicalSourceNode {
     pub id: usize,
     pub schema: SchemaRef,
-    pub provider: SourceProvider,
+    pub source_provider: SourceProvider,
     pub time_expr: Option<PhysicalExpr>,
     pub watermark_expr: Option<PhysicalExpr>,
 }

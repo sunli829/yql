@@ -18,5 +18,5 @@ anyhow = "1.0.40"
 [workspace]
 members = [
     "libs/core",
-    "libs/sql",
+#    "libs/sql",
 ]
