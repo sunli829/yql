@@ -1,15 +1,12 @@
 use std::collections::HashMap;
 use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
 use anyhow::{Context as _, Result};
-use futures_util::stream::BoxStream;
+use futures_util::stream::{BoxStream, StreamExt};
 use tokio::sync::broadcast;
-use tokio::time::Interval;
-use tokio_stream::Stream;
+use tokio_stream::wrappers::IntervalStream;
 
 use crate::dataset::DataSet;
 use crate::execution::checkpoint::CheckPointBarrier;
@@ -49,43 +46,39 @@ pub struct CreateStreamContext {
     pub prev_state: HashMap<usize, Vec<u8>>,
 }
 
-pub struct DataStream {
-    ctx: Arc<ExecutionContext>,
-    event_stream: EventStream,
-    node_count: usize,
-    source_count: usize,
-    tx_barrier: broadcast::Sender<Arc<CheckPointBarrier>>,
-    checkpoint_interval: Interval,
+enum Control {
+    CreateCheckPoint,
+    Event(Result<Event>),
 }
 
-impl DataStream {
-    pub fn try_new(
-        ctx: ExecutionContext,
-        plan: LogicalPlan,
-        signal: Option<impl Future<Output = ()> + Send + 'static>,
-    ) -> Result<Self> {
+pub fn create_data_stream(
+    ctx: ExecutionContext,
+    plan: LogicalPlan,
+    signal: Option<impl Future<Output = ()> + Send + 'static>,
+) -> BoxStream<'static, Result<DataSet>> {
+    Box::pin(async_stream::try_stream! {
+         let prev_state: HashMap<usize, Vec<u8>> = match &ctx.storage {
+            Some(storage) => {
+                match storage.load_state().await? {
+                    Some(data) => bincode::deserialize(&data).context("failed to deserialize stream state.")?,
+                    None => Default::default(),
+                }
+            }
+            None => Default::default(),
+        };
+
         let ctx = Arc::new(ctx);
         let plan = PhysicalPlan::try_new(plan)?;
         let node_count = plan.node_count;
         let source_count = plan.source_count;
         let (tx_barrier, _) = broadcast::channel(8);
-
-        let prev_state: HashMap<usize, Vec<u8>> = match &ctx.storage {
-            Some(storage) => {
-                let data = storage.load_state()?;
-                bincode::deserialize(&data).context("failed to deserialize stream state.")?
-            }
-            None => Default::default(),
-        };
-
         let mut create_ctx = CreateStreamContext {
             ctx: ctx.clone(),
             tx_barrier: tx_barrier.clone(),
             prev_state,
         };
-
         let event_stream = crate::execution::streams::create_stream(&mut create_ctx, plan.root)?;
-        let checkpoint_interval = tokio::time::interval(ctx.checkpoint_interval);
+        let checkpoint_interval = IntervalStream::new(tokio::time::interval(ctx.checkpoint_interval));
 
         if let Some(signal) = signal {
             tokio::spawn({
@@ -98,44 +91,32 @@ impl DataStream {
             });
         }
 
-        Ok(Self {
-            ctx,
-            event_stream,
-            node_count,
-            source_count,
-            tx_barrier,
-            checkpoint_interval,
-        })
-    }
-}
+        let mut input = futures_util::stream::select(
+            event_stream.map(Control::Event),
+            checkpoint_interval.map(|_| Control::CreateCheckPoint),
+        );
 
-impl Stream for DataStream {
-    type Item = Result<DataSet>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        loop {
-            if self.checkpoint_interval.poll_tick(cx).is_ready() && self.ctx.storage.is_some() {
-                let barrier = Arc::new(CheckPointBarrier::new(
-                    self.node_count,
-                    self.source_count,
-                    false,
-                ));
-                let _ = self.tx_barrier.send(barrier.clone());
-                let ctx = self.ctx.clone();
-                tokio::spawn(save_state(ctx, barrier));
-            }
-
-            return match Pin::new(&mut self.event_stream).poll_next(cx) {
-                Poll::Ready(Some(Ok(Event::DataSet { dataset, .. }))) => {
-                    Poll::Ready(Some(Ok(dataset)))
+        while let Some(control) = input.next().await {
+            match control {
+                Control::CreateCheckPoint => {
+                    let barrier = Arc::new(CheckPointBarrier::new(
+                        node_count,
+                        source_count,
+                        false,
+                    ));
+                    let _ = tx_barrier.send(barrier.clone());
+                    let ctx = ctx.clone();
+                    tokio::spawn(save_state(ctx, barrier));
                 }
-                Poll::Ready(Some(Ok(_))) => continue,
-                Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
-                Poll::Ready(None) => Poll::Ready(None),
-                Poll::Pending => Poll::Pending,
-            };
+                Control::Event(res) => {
+                    let event = res?;
+                    if let Event::DataSet { dataset, .. } = event {
+                        yield dataset;
+                    }
+                }
+            }
         }
-    }
+    })
 }
 
 async fn save_state(ctx: Arc<ExecutionContext>, barrier: Arc<CheckPointBarrier>) {
@@ -155,7 +136,7 @@ async fn save_state(ctx: Arc<ExecutionContext>, barrier: Arc<CheckPointBarrier>)
     };
 
     if let Some(storage) = &ctx.storage {
-        match storage.save_state(data) {
+        match storage.save_state(data).await {
             Ok(()) => tracing::info!(name = %ctx.name, "checkpoint created"),
             Err(err) => {
                 tracing::info!(name = %ctx.name, error = %err, "failed to save checkpoint")

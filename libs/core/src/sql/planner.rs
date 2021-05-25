@@ -48,7 +48,7 @@ fn create_source(ctx: &dyn SqlContext, source: Source) -> Result<DataFrame> {
     match source.from {
         SourceFrom::Named(name) => {
             let provider = ctx
-                .create_source_provider(&name)
+                .create_source_provider(&name)?
                 .ok_or_else(|| anyhow::anyhow!("source '{}' not found.", name))?;
             Ok(DataFrame::new(
                 provider.source_provider,

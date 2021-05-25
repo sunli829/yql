@@ -190,7 +190,9 @@ impl AggregateManager {
         for window in completed_windows {
             let mut columns = Vec::with_capacity(self.aggr_exprs.len());
 
-            for (index, field) in self.schema.fields().iter().enumerate() {
+            for index in 0..self.aggr_exprs.len() {
+                let field = &self.schema.fields()[index];
+
                 match field.data_type {
                     DataType::Null => {
                         columns.push(Arc::new(NullArray::new(window.children.len())) as ArrayRef)

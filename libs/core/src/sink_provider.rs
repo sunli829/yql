@@ -9,8 +9,18 @@ pub trait Sink {
 
 pub type BoxSink = Box<dyn Sink + Send + 'static>;
 
-pub trait SinkProvider: Send + Sync + 'static {
+pub trait SinkProvider: Send + 'static {
     fn provider_name(&self) -> &'static str;
 
     fn create(&self) -> Result<BoxSink>;
+}
+
+impl SinkProvider for Box<dyn SinkProvider> {
+    fn provider_name(&self) -> &'static str {
+        self.as_ref().provider_name()
+    }
+
+    fn create(&self) -> Result<BoxSink> {
+        self.as_ref().create()
+    }
 }

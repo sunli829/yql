@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 use crate::expr::Expr;
 use crate::SourceProvider;
 
@@ -8,5 +10,5 @@ pub struct SqlSourceProvider {
 }
 
 pub trait SqlContext {
-    fn create_source_provider(&self, name: &str) -> Option<SqlSourceProvider>;
+    fn create_source_provider(&self, name: &str) -> Result<Option<SqlSourceProvider>>;
 }

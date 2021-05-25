@@ -1,7 +1,6 @@
 use chrono::TimeZone;
-use chrono::{DateTime, Datelike, Duration, NaiveDate};
+use chrono::{DateTime, Datelike, Duration};
 use chrono_tz::Tz;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -79,5 +78,83 @@ impl Window {
                 vec![(start.timestamp_millis(), end.timestamp_millis())]
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+
+    #[test]
+    fn test_period_day() {
+        let tz = chrono_tz::Asia::Shanghai;
+
+        assert_eq!(
+            Period::Day.window(
+                tz.from_local_datetime(&NaiveDate::from_ymd(2020, 1, 1).and_hms(9, 30, 35))
+                    .unwrap()
+            ),
+            (
+                tz.from_local_datetime(&NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0))
+                    .unwrap(),
+                tz.from_local_datetime(&NaiveDate::from_ymd(2020, 1, 2).and_hms(0, 0, 0))
+                    .unwrap()
+            )
+        );
+    }
+
+    #[test]
+    fn test_period_week() {
+        let tz = chrono_tz::Asia::Shanghai;
+
+        assert_eq!(
+            Period::Week.window(
+                tz.from_local_datetime(&NaiveDate::from_ymd(2020, 7, 1).and_hms(12, 30, 45))
+                    .unwrap()
+            ),
+            (
+                tz.from_local_datetime(&NaiveDate::from_ymd(2020, 6, 29).and_hms(0, 0, 0))
+                    .unwrap(),
+                tz.from_local_datetime(&NaiveDate::from_ymd(2020, 7, 6).and_hms(0, 0, 0))
+                    .unwrap()
+            )
+        );
+    }
+
+    #[test]
+    fn test_period_month() {
+        let tz = chrono_tz::Asia::Shanghai;
+
+        assert_eq!(
+            Period::Month.window(
+                tz.from_local_datetime(&NaiveDate::from_ymd(2020, 7, 20).and_hms(12, 30, 45))
+                    .unwrap()
+            ),
+            (
+                tz.from_local_datetime(&NaiveDate::from_ymd(2020, 7, 1).and_hms(0, 0, 0))
+                    .unwrap(),
+                tz.from_local_datetime(&NaiveDate::from_ymd(2020, 8, 1).and_hms(0, 0, 0))
+                    .unwrap()
+            )
+        );
+    }
+
+    #[test]
+    fn test_period_year() {
+        let tz = chrono_tz::Asia::Shanghai;
+
+        assert_eq!(
+            Period::Year.window(
+                tz.from_local_datetime(&NaiveDate::from_ymd(2020, 7, 20).and_hms(12, 30, 45))
+                    .unwrap()
+            ),
+            (
+                tz.from_local_datetime(&NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0))
+                    .unwrap(),
+                tz.from_local_datetime(&NaiveDate::from_ymd(2021, 1, 1).and_hms(0, 0, 0))
+                    .unwrap()
+            )
+        );
     }
 }

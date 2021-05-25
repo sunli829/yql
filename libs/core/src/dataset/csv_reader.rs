@@ -10,6 +10,7 @@ use anyhow::Result;
 use csv::{ByteRecord, StringRecord};
 use once_cell::sync::Lazy;
 use regex::{Regex, RegexBuilder};
+use serde::{Deserialize, Serialize};
 
 use crate::array::{
     ArrayRef, BooleanBuilder, BooleanType, DataType, Float32Builder, Float32Type, Float64Builder,
@@ -19,6 +20,7 @@ use crate::array::{
 };
 use crate::dataset::{DataSet, Field, Schema, SchemaRef};
 
+#[derive(Serialize, Deserialize)]
 pub struct CsvOptions {
     pub delimiter: u8,
     pub has_header: bool,

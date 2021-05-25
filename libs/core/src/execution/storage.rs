@@ -1,7 +1,8 @@
 use anyhow::Result;
 
+#[async_trait::async_trait]
 pub trait Storage: Send + Sync + 'static {
-    fn save_state(&self, data: Vec<u8>) -> Result<()>;
+    async fn save_state(&self, data: Vec<u8>) -> Result<()>;
 
-    fn load_state(&self) -> Result<Vec<u8>>;
+    async fn load_state(&self) -> Result<Option<Vec<u8>>>;
 }

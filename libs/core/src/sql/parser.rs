@@ -21,7 +21,7 @@ pub fn ident(input: &str) -> IResult<&str, &str> {
     context(
         "ident",
         recognize(pair(
-            alt((alpha1, tag("_"))),
+            alt((alpha1, tag("_"), tag("@"))),
             many0(alt((alphanumeric1, tag("_")))),
         )),
     )(input)

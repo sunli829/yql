@@ -4,4 +4,4 @@ pub(crate) mod planner;
 
 mod context;
 
-pub use context::SqlContext;
+pub use context::{SqlContext, SqlSourceProvider};

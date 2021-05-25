@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use anyhow::Result;
-use parking_lot::RwLock;
 use rocksdb::{DBCompressionType, Options, DB};
 use serde::{Deserialize, Serialize};
 use yql_core::dataset::SchemaRef;
@@ -10,24 +9,24 @@ use yql_core::sql::ast::Select;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SourceDefinition {
-    name: String,
-    schema: SchemaRef,
-    uri: String,
-    time_expr: Option<Expr>,
-    watermark_expr: Option<Expr>,
+    pub name: String,
+    pub schema: SchemaRef,
+    pub uri: String,
+    pub time_expr: Option<Expr>,
+    pub watermark_expr: Option<Expr>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SinkDefinition {
-    name: String,
-    uri: String,
+    pub name: String,
+    pub uri: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StreamDefinition {
-    name: String,
-    select: Select,
-    to: String,
+    pub name: String,
+    pub select: Select,
+    pub to: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -35,6 +34,15 @@ pub enum Definition {
     Source(SourceDefinition),
     Stream(StreamDefinition),
     Sink(SinkDefinition),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum StreamState {
+    Created,
+    Started,
+    Stop,
+    Finish,
+    Error(String),
 }
 
 impl Definition {
@@ -49,7 +57,6 @@ impl Definition {
 
 pub struct Storage {
     db: DB,
-    meta_lock: RwLock<()>,
 }
 
 impl Storage {
@@ -60,13 +67,11 @@ impl Storage {
 
         let db = Storage {
             db: DB::open(&opts, path)?,
-            meta_lock: Default::default(),
         };
         Ok(db)
     }
 
     pub fn create_definition(&self, definition: Definition) -> Result<()> {
-        let _ = self.meta_lock.write();
         let key = format!("definition/{}", definition.name());
         anyhow::ensure!(
             self.db.get_pinned(&key)?.is_none(),
@@ -78,7 +83,6 @@ impl Storage {
     }
 
     pub fn definition_list(&self) -> Result<Vec<Definition>> {
-        let _ = self.meta_lock.read();
         let mut definitions = Vec::new();
 
         for (key, value) in self.db.prefix_iterator("definition/") {
@@ -104,13 +108,44 @@ impl Storage {
         }
     }
 
-    pub fn get_stream_state(&self, name: &str) -> Result<Option<Vec<u8>>> {
-        let key = format!("stream_state/{}", name);
+    pub fn definition_exists(&self, name: &str) -> Result<bool> {
+        let key = format!("definition/{}", name);
+        Ok(self.db.get_pinned(key)?.is_some())
+    }
+
+    pub fn get_stream_state_data(&self, name: &str) -> Result<Option<Vec<u8>>> {
+        let key = format!("stream_state_data/{}", name);
         Ok(self.db.get(key)?)
     }
 
-    pub fn set_stream_state(&self, name: &str, data: &[u8]) -> Result<()> {
-        let key = format!("stream_state/{}", name);
+    pub fn set_stream_state_data(&self, name: &str, data: &[u8]) -> Result<()> {
+        let key = format!("stream_state_data/{}", name);
         Ok(self.db.put(key, data)?)
+    }
+
+    pub fn delete_stream_state_data(&self, name: &str) -> Result<()> {
+        let key = format!("stream_state_data/{}", name);
+        self.db.delete(key)?;
+        Ok(())
+    }
+
+    pub fn get_stream_state(&self, name: &str) -> Result<Option<StreamState>> {
+        let key = format!("stream_state/{}", name);
+        match self.db.get_pinned(key)? {
+            Some(data) => Ok(Some(bincode::deserialize(&data)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn set_stream_state(&self, name: &str, state: StreamState) -> Result<()> {
+        let key = format!("stream_state/{}", name);
+        self.db.put(key, bincode::serialize(&state)?)?;
+        Ok(())
+    }
+
+    pub fn delete_stream_state(&self, name: &str) -> Result<()> {
+        let key = format!("stream_state/{}", name);
+        self.db.delete(key)?;
+        Ok(())
     }
 }

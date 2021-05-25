@@ -81,7 +81,7 @@ fn projection_to_physical(
     projection: LogicalProjectionPlan,
 ) -> Result<PhysicalNode> {
     let input = to_physical(ctx, *projection.input)?;
-    let (exprs, schema) = select_expr(projection.exprs, input.schema())?;
+    let (exprs, schema) = select_expr(projection.exprs, input.schema(), vec![])?;
     Ok(PhysicalNode::Projection(PhysicalProjectionNode {
         id: ctx.take_id(),
         schema,
@@ -111,8 +111,10 @@ fn aggregate_to_physical(
     aggregate: LogicalAggregatePlan,
 ) -> Result<PhysicalNode> {
     let input = to_physical(ctx, *aggregate.input)?;
-    let time_idx = match input.schema().field(None, FIELD_TIME) {
-        Some((idx, field)) if field.data_type.is_timestamp() => idx,
+    let (time_idx, timezone) = match input.schema().field(None, FIELD_TIME) {
+        Some((idx, Field { data_type:DataType::Timestamp(timezone), .. })) => {
+            (idx, *timezone)
+        },
         _ => anyhow::bail!("A column whose name is '@time' and type is 'timestamp' is required to perform aggregation operations."),
     };
 
@@ -121,7 +123,11 @@ fn aggregate_to_physical(
         .into_iter()
         .map(|expr| expr.into_physical(input.schema()))
         .try_collect()?;
-    let (aggr_exprs, schema) = select_expr(aggregate.aggr_exprs, input.schema())?;
+    let (aggr_exprs, schema) = select_expr(
+        aggregate.aggr_exprs,
+        input.schema(),
+        vec![Field::new(FIELD_TIME, DataType::Timestamp(timezone))],
+    )?;
 
     Ok(PhysicalNode::Aggregate(PhysicalAggregateNode {
         id: ctx.take_id(),
@@ -134,7 +140,11 @@ fn aggregate_to_physical(
     }))
 }
 
-fn select_expr(exprs: Vec<Expr>, schema: SchemaRef) -> Result<(Vec<PhysicalExpr>, SchemaRef)> {
+fn select_expr(
+    exprs: Vec<Expr>,
+    schema: SchemaRef,
+    extra_fields: Vec<Field>,
+) -> Result<(Vec<PhysicalExpr>, SchemaRef)> {
     let mut fields = Vec::new();
     let mut physical_exprs = Vec::new();
 
@@ -172,6 +182,7 @@ fn select_expr(exprs: Vec<Expr>, schema: SchemaRef) -> Result<(Vec<PhysicalExpr>
         }
     }
 
+    fields.extend(extra_fields);
     let new_schema = Arc::new(Schema::try_new(fields)?);
     Ok((physical_exprs, new_schema))
 }

@@ -2,10 +2,10 @@ use chrono_tz::Tz;
 use nom::branch::alt;
 use nom::bytes::complete::tag_no_case;
 use nom::character::complete::char;
-use nom::combinator::{cut, map, map_res, opt, value};
+use nom::combinator::{cut, eof, map, map_res, opt, value};
 use nom::error::context;
 use nom::multi::separated_list0;
-use nom::sequence::{delimited, tuple};
+use nom::sequence::{delimited, terminated, tuple};
 use nom::IResult;
 use yql_core::array::DataType;
 use yql_core::dataset::Field;
@@ -63,6 +63,17 @@ pub struct StmtDeleteSink {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct StmtStartStream {
+    pub name: String,
+    pub restart: bool,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct StmtStopStream {
+    pub name: String,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Stmt {
     CreateSource(StmtCreateSource),
     CreateStream(StmtCreateStream),
@@ -70,6 +81,8 @@ pub enum Stmt {
     DeleteSource(StmtDeleteSource),
     DeleteStream(StmtDeleteStream),
     DeleteSink(StmtDeleteSink),
+    StartStream(StmtStartStream),
+    StopStream(StmtStopStream),
 }
 
 fn timezone(input: &str) -> IResult<&str, Tz> {
@@ -248,17 +261,51 @@ fn stmt_delete_sink(input: &str) -> IResult<&str, StmtDeleteSink> {
     )(input)
 }
 
+fn stmt_start_stream(input: &str) -> IResult<&str, StmtStartStream> {
+    context(
+        "stmt_start_stream",
+        map(
+            tuple((
+                alt((
+                    value(false, tag_no_case("start")),
+                    value(true, tag_no_case("restart")),
+                )),
+                sp,
+                tag_no_case("stream"),
+                sp,
+                name,
+            )),
+            |(restart, _, _, _, name)| StmtStartStream { name, restart },
+        ),
+    )(input)
+}
+
+fn stmt_stop_stream(input: &str) -> IResult<&str, StmtStopStream> {
+    context(
+        "stmt_stop_stream",
+        map(
+            tuple((tag_no_case("stop"), sp, tag_no_case("stream"), sp, name)),
+            |(_, _, _, _, name)| StmtStopStream { name },
+        ),
+    )(input)
+}
+
 pub fn stmt(input: &str) -> IResult<&str, Stmt> {
     context(
         "stmt",
-        alt((
-            map(delimited(sp, stmt_create_source, sp), Stmt::CreateSource),
-            map(delimited(sp, stmt_create_stream, sp), Stmt::CreateStream),
-            map(delimited(sp, stmt_create_sink, sp), Stmt::CreateSink),
-            map(delimited(sp, stmt_delete_source, sp), Stmt::DeleteSource),
-            map(delimited(sp, stmt_delete_stream, sp), Stmt::DeleteStream),
-            map(delimited(sp, stmt_delete_sink, sp), Stmt::DeleteSink),
-        )),
+        terminated(
+            alt((
+                map(delimited(sp, stmt_create_source, sp), Stmt::CreateSource),
+                map(delimited(sp, stmt_create_stream, sp), Stmt::CreateStream),
+                map(delimited(sp, stmt_create_sink, sp), Stmt::CreateSink),
+                map(delimited(sp, stmt_delete_source, sp), Stmt::DeleteSource),
+                map(delimited(sp, stmt_delete_stream, sp), Stmt::DeleteStream),
+                map(delimited(sp, stmt_delete_sink, sp), Stmt::DeleteSink),
+                map(delimited(sp, stmt_start_stream, sp), Stmt::StartStream),
+                map(delimited(sp, stmt_stop_stream, sp), Stmt::StopStream),
+            )),
+            eof,
+        ),
     )(input)
 }
 

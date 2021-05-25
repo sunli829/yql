@@ -8,7 +8,7 @@ use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 
 use crate::dataset::DataSet;
-use crate::execution::stream::DataStream;
+use crate::execution::stream::create_data_stream;
 use crate::expr::Expr;
 use crate::planner::logical_plan::{
     LogicalAggregatePlan, LogicalFilterPlan, LogicalPlan, LogicalProjectionPlan, LogicalSourcePlan,
@@ -65,7 +65,7 @@ impl DataFrame {
         }))
     }
 
-    pub fn into_stream(self, ctx: ExecutionContext) -> Result<BoxStream<'static, Result<DataSet>>> {
+    pub fn into_stream(self, ctx: ExecutionContext) -> BoxStream<'static, Result<DataSet>> {
         self.into_stream_with_graceful_shutdown(
             ctx,
             Option::<futures_util::future::Pending<()>>::None,
@@ -76,15 +76,15 @@ impl DataFrame {
         self,
         ctx: ExecutionContext,
         signal: Option<impl Future<Output = ()> + Send + 'static>,
-    ) -> Result<BoxStream<'static, Result<DataSet>>> {
-        Ok(Box::pin(DataStream::try_new(ctx, self.0, signal)?))
+    ) -> BoxStream<'static, Result<DataSet>> {
+        create_data_stream(ctx, self.0, signal)
     }
 
     pub fn into_task(
         self,
         ctx: ExecutionContext,
         sink_provider: impl SinkProvider,
-    ) -> Result<BoxFuture<'static, Result<()>>> {
+    ) -> BoxFuture<'static, Result<()>> {
         self.into_task_with_graceful_shutdown(
             ctx,
             sink_provider,
@@ -97,15 +97,15 @@ impl DataFrame {
         ctx: ExecutionContext,
         sink_provider: impl SinkProvider,
         signal: Option<impl Future<Output = ()> + Send + 'static>,
-    ) -> Result<BoxFuture<'static, Result<()>>> {
-        let mut stream = self.into_stream_with_graceful_shutdown(ctx, signal)?;
-        let mut sink = sink_provider.create()?;
-        Ok(Box::pin(async move {
+    ) -> BoxFuture<'static, Result<()>> {
+        let mut stream = self.into_stream_with_graceful_shutdown(ctx, signal);
+        Box::pin(async move {
+            let mut sink = sink_provider.create()?;
             while let Some(res) = stream.next().await {
                 let dataset = res?;
                 sink.send(dataset).await?;
             }
             Ok(())
-        }))
+        })
     }
 }
