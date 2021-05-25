@@ -1,24 +1,85 @@
 use std::any::Any;
 use std::fmt::{self, Debug, Formatter};
 use std::iter::FromIterator;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
+use serde::de::DeserializeOwned;
 use serde::ser::SerializeSeq;
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::array::bitmap::{Bitmap, BitmapBuilder};
 use crate::array::{Array, ArrayBuilder, ArrayRef, DataType};
 
-/// Array builder for string.
-#[derive(Default)]
-pub struct StringBuilder {
-    index_buf: BytesMut,
-    content_buf: BytesMut,
-    bitmap: BitmapBuilder,
+pub trait NativeType:
+    Debug + Copy + Send + Sync + Default + PartialEq + Serialize + DeserializeOwned + 'static
+{
 }
 
-impl ArrayBuilder for StringBuilder {
+pub trait PrimitiveType: Copy + Send + Sync + 'static {
+    const DATA_TYPE: DataType;
+
+    type Native: NativeType;
+
+    fn byte_width() -> usize {
+        std::mem::size_of::<Self::Native>()
+    }
+}
+
+macro_rules! impl_native_types {
+    ($($ty:ty),*) => {
+        $(
+        impl NativeType for $ty {}
+        )*
+    };
+}
+
+macro_rules! impl_primitive_types {
+    ($(($pt:ident, $native_ty:ty, $dt:expr)),*) => {
+        $(
+        #[derive(Debug, Copy, Clone)]
+        pub struct $pt;
+
+        impl PrimitiveType for $pt {
+            const DATA_TYPE: DataType = $dt;
+            type Native = $native_ty;
+        }
+        )*
+    };
+}
+
+impl_native_types!(i8, i16, i32, i64, f32, f64, bool);
+
+impl_primitive_types!(
+    (Int8Type, i8, DataType::Int8),
+    (Int16Type, i16, DataType::Int16),
+    (Int32Type, i32, DataType::Int32),
+    (Int64Type, i64, DataType::Int64),
+    (Float32Type, f32, DataType::Float32),
+    (Float64Type, f64, DataType::Float64),
+    (BooleanType, bool, DataType::Boolean),
+    (TimestampType, i64, DataType::Timestamp(None))
+);
+
+/// Array builder for fixed-width primitive types.
+pub struct PrimitiveBuilder<T: PrimitiveType> {
+    data: BytesMut,
+    bitmap: BitmapBuilder,
+    _mark: PhantomData<T>,
+}
+
+impl<T: PrimitiveType> Default for PrimitiveBuilder<T> {
+    fn default() -> Self {
+        PrimitiveBuilder {
+            data: BytesMut::new(),
+            bitmap: BitmapBuilder::default(),
+            _mark: PhantomData,
+        }
+    }
+}
+
+impl<T: PrimitiveType> ArrayBuilder for PrimitiveBuilder<T> {
     #[inline]
     fn as_any(&self) -> &dyn Any {
         self
@@ -26,83 +87,76 @@ impl ArrayBuilder for StringBuilder {
 
     #[inline]
     fn len(&self) -> usize {
-        self.index_buf.len() / (std::mem::size_of::<u32>() * 2)
+        self.data.len() / T::byte_width()
     }
 
     #[inline]
     fn is_empty(&self) -> bool {
-        self.index_buf.is_empty()
+        self.data.is_empty()
     }
 }
 
-impl StringBuilder {
+impl<T: PrimitiveType> PrimitiveBuilder<T> {
     #[inline]
     pub fn with_capacity(size: usize) -> Self {
         Self {
-            index_buf: BytesMut::with_capacity(size * std::mem::size_of::<u32>() * 2),
-            content_buf: BytesMut::new(),
+            data: BytesMut::with_capacity(size * T::byte_width()),
             bitmap: BitmapBuilder::default(),
+            _mark: PhantomData,
         }
     }
 
     #[inline]
-    pub fn append(&mut self, value: &str) {
-        self.index_buf
-            .put_slice(&(self.content_buf.len() as u32).to_ne_bytes());
-        self.index_buf
-            .put_slice(&(value.len() as u32).to_ne_bytes());
-        self.content_buf.put_slice(value.as_bytes());
+    pub fn append(&mut self, value: T::Native) {
+        self.data.put_slice(unsafe {
+            std::slice::from_raw_parts(
+                &value as *const <T as PrimitiveType>::Native as *const u8,
+                T::byte_width(),
+            )
+        });
     }
 
     #[inline]
     pub fn append_null(&mut self) {
-        self.bitmap.set(
-            self.index_buf.len() / (std::mem::size_of::<u32>() * 2),
-            false,
-        );
-        self.append("");
+        self.bitmap.set(self.data.len() / T::byte_width(), false);
+        self.append(<T as PrimitiveType>::Native::default());
     }
 
     #[inline]
-    pub fn append_opt(&mut self, value: Option<&str>) {
+    pub fn append_opt(&mut self, value: Option<T::Native>) {
         match value {
             Some(value) => self.append(value),
             None => self.append_null(),
         }
     }
 
-    pub fn finish(self) -> StringArray {
-        StringArray::Array {
-            offset: 0,
-            length: self.index_buf.len()
-                / (std::mem::size_of::<u32>() + std::mem::size_of::<u32>()),
-            index_buf: self.index_buf,
-            content_buf: self.content_buf,
+    pub fn finish(self) -> PrimitiveArray<T> {
+        PrimitiveArray::Array {
+            data: self.data.freeze(),
             bitmap: if !self.bitmap.is_empty() {
                 Some(self.bitmap.finish())
             } else {
                 None
             },
+            _mark: PhantomData,
         }
     }
 }
 
-/// An array where each element is a variable-sized sequence of bytes representing a string whose maximum length (in bytes) is represented by a u32.
-pub enum StringArray {
+/// Array whose elements are of primitive types.
+pub enum PrimitiveArray<T: PrimitiveType> {
     Array {
-        offset: usize,
-        length: usize,
-        index_buf: BytesMut,
-        content_buf: BytesMut,
+        data: Bytes,
         bitmap: Option<Bitmap>,
+        _mark: PhantomData<T>,
     },
     Scalar {
         len: usize,
-        value: Option<Arc<str>>,
+        value: Option<T::Native>,
     },
 }
 
-impl Debug for StringArray {
+impl<T: PrimitiveType> Debug for PrimitiveArray<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut ls = f.debug_list();
         for value in self.iter() {
@@ -112,7 +166,7 @@ impl Debug for StringArray {
     }
 }
 
-impl Array for StringArray {
+impl<T: PrimitiveType> Array for PrimitiveArray<T> {
     #[inline]
     fn as_any(&self) -> &dyn Any {
         self
@@ -120,14 +174,14 @@ impl Array for StringArray {
 
     #[inline]
     fn data_type(&self) -> DataType {
-        DataType::String
+        T::DATA_TYPE
     }
 
     #[inline]
     fn len(&self) -> usize {
         match self {
-            StringArray::Array { length, .. } => *length,
-            StringArray::Scalar { len, .. } => *len,
+            PrimitiveArray::Array { data, .. } => data.len() / T::byte_width(),
+            PrimitiveArray::Scalar { len, .. } => *len,
         }
     }
 
@@ -149,51 +203,53 @@ impl Array for StringArray {
         }
 
         match self {
-            StringArray::Array {
-                index_buf,
-                content_buf,
-                bitmap,
-                ..
-            } => Arc::new(StringArray::Array {
-                offset,
-                length,
-                index_buf: index_buf.clone(),
-                content_buf: content_buf.clone(),
+            PrimitiveArray::Array { data, bitmap, .. } => Arc::new(Self::Array {
+                data: data.slice((offset * T::byte_width())..(offset + length) * T::byte_width()),
                 bitmap: bitmap.as_ref().map(|bitmap| bitmap.offset(offset)),
+                _mark: PhantomData,
             }),
-            StringArray::Scalar { len, value, .. } => Arc::new(Self::Scalar {
-                len: length.min(*len),
-                value: value.clone(),
+            PrimitiveArray::Scalar { value, .. } => Arc::new(Self::Scalar {
+                len: length,
+                value: *value,
             }),
         }
     }
 
+    #[inline]
     fn is_valid(&self, index: usize) -> bool {
         if index >= self.len() {
             panic!("index (is {}) should be <= len (is {})", index, self.len());
         }
 
         match self {
-            StringArray::Array { bitmap, .. } => match &bitmap {
+            PrimitiveArray::Array { bitmap, .. } => match &bitmap {
                 Some(bitmap) => bitmap.is_valid(index),
                 None => true,
             },
-            StringArray::Scalar { value, .. } => value.is_some(),
+            PrimitiveArray::Scalar { value, .. } => value.is_some(),
         }
     }
 
     fn null_count(&self) -> usize {
-        let mut count = 0;
-        for i in 0..self.len() {
-            if self.is_null(i) {
-                count += 1;
+        if let Some(scalar) = self.to_scalar() {
+            if scalar.is_none() {
+                self.len()
+            } else {
+                0
             }
+        } else {
+            let mut count = 0;
+            for i in 0..self.len() {
+                if self.is_null(i) {
+                    count += 1;
+                }
+            }
+            count
         }
-        count
     }
 }
 
-impl PartialEq for StringArray {
+impl<A: PrimitiveType> PartialEq for PrimitiveArray<A> {
     fn eq(&self, other: &Self) -> bool {
         if self.len() != other.len() {
             return false;
@@ -202,114 +258,123 @@ impl PartialEq for StringArray {
     }
 }
 
-impl<A: AsRef<str>> FromIterator<A> for StringArray {
-    fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
+impl<A: PrimitiveType> FromIterator<<A as PrimitiveType>::Native> for PrimitiveArray<A> {
+    fn from_iter<T: IntoIterator<Item = <A as PrimitiveType>::Native>>(iter: T) -> Self {
         let iter = iter.into_iter();
-        let mut builder = StringBuilder::with_capacity(iter.size_hint().0);
+        let mut builder = PrimitiveBuilder::with_capacity(iter.size_hint().0);
         for value in iter {
-            builder.append(value.as_ref());
+            builder.append(value);
         }
         builder.finish()
     }
 }
 
-impl StringArray {
+impl<T: PrimitiveType> PrimitiveArray<T> {
     #[inline]
-    pub fn new_scalar(len: usize, value: Option<impl Into<Arc<str>>>) -> Self {
-        Self::Scalar {
-            len,
-            value: value.map(Into::into),
-        }
+    pub fn new_scalar(len: usize, value: Option<T::Native>) -> Self {
+        Self::Scalar { len, value }
     }
 
     #[inline]
     pub fn is_scalar_array(&self) -> bool {
-        matches!(self, StringArray::Scalar { .. })
+        matches!(self, PrimitiveArray::Scalar { .. })
     }
 
+    /// Returns `Some` if the array is scalar array.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use yql_array::Int32Array;
+    ///
+    /// let array = Int32Array::new_scalar(100, Some(1));
+    /// assert_eq!(array.to_scalar(), Some(Some(1)));
+    ///
+    /// let array = Int32Array::new_scalar(100, None);
+    /// assert_eq!(array.to_scalar(), Some(None));
+    ///
+    /// let array = Int32Array::from_vec(vec![1, 2, 3]);
+    /// assert_eq!(array.to_scalar(), None);
+    /// ```
     #[inline]
-    pub fn to_scalar(&self) -> Option<Option<&str>> {
+    pub fn to_scalar(&self) -> Option<Option<T::Native>> {
         match self {
-            StringArray::Array { .. } => None,
-            StringArray::Scalar { value, .. } => Some(value.as_deref()),
+            PrimitiveArray::Array { .. } => None,
+            PrimitiveArray::Scalar { value, .. } => Some(*value),
         }
     }
 
+    /// Create an empty array.
     #[inline]
     pub fn empty() -> Self {
-        Self::from_iter(std::iter::empty::<&str>())
+        std::iter::empty().collect()
     }
 
-    pub fn from_vec<A: AsRef<str>>(values: Vec<A>) -> Self {
-        Self::from_iter(values.into_iter())
+    pub fn from_vec(values: Vec<T::Native>) -> Self {
+        let mut data = BytesMut::with_capacity(values.len() * T::byte_width());
+        data.extend_from_slice(unsafe {
+            std::slice::from_raw_parts(
+                values.as_ptr() as *const T as *const u8,
+                values.len() * T::byte_width(),
+            )
+        });
+        PrimitiveArray::Array {
+            data: data.freeze(),
+            bitmap: None,
+            _mark: PhantomData,
+        }
     }
 
-    pub fn from_opt_vec<A: AsRef<str>>(values: Vec<Option<A>>) -> Self {
-        let mut builder = StringBuilder::default();
+    pub fn from_opt_vec(values: Vec<Option<T::Native>>) -> Self {
+        let mut builder = PrimitiveBuilder::<T>::default();
         for value in values {
-            builder.append_opt(value.as_ref().map(AsRef::as_ref));
+            builder.append_opt(value);
         }
         builder.finish()
     }
 
     #[inline]
-    pub fn value(&self, index: usize) -> &str {
-        if index >= self.len() {
-            panic!("index (is {}) should be <= len (is {})", index, self.len());
-        }
-
+    fn interval_value(&self, index: usize) -> T::Native {
         match self {
-            StringArray::Array {
-                offset,
-                index_buf,
-                content_buf,
-                ..
-            } => {
-                let index = *offset + index;
-                let index_data = unsafe {
-                    std::slice::from_raw_parts(
-                        index_buf.as_ptr() as *const u32,
-                        index_buf.len() / std::mem::size_of::<u32>(),
-                    )
-                };
-                let p = index * 2;
-                let data_offset = index_data[p];
-                let data_length = index_data[p + 1];
-                unsafe {
-                    std::str::from_utf8_unchecked(
-                        &content_buf.as_ref()
-                            [data_offset as usize..data_offset as usize + data_length as usize],
-                    )
-                }
-            }
-            StringArray::Scalar { value, .. } => value.as_deref().unwrap_or_default(),
+            PrimitiveArray::Array { data, .. } => unsafe {
+                std::slice::from_raw_parts(data.as_ptr() as *const T::Native, self.len())[index]
+            },
+            PrimitiveArray::Scalar { value, .. } => value.unwrap_or_default(),
         }
     }
 
     #[inline]
-    pub fn value_opt(&self, index: usize) -> Option<&str> {
+    pub fn value(&self, index: usize) -> T::Native {
+        if index >= self.len() {
+            panic!("index (is {}) should be <= len (is {})", index, self.len());
+        }
+        self.interval_value(index)
+    }
+
+    #[inline]
+    pub fn value_opt(&self, index: usize) -> Option<T::Native> {
         if index >= self.len() {
             panic!("index (is {}) should be <= len (is {})", index, self.len());
         }
 
         if self.is_valid(index) {
-            Some(self.value(index))
+            Some(self.interval_value(index))
         } else {
             None
         }
     }
 
     #[inline]
-    pub fn iter(&self) -> StringIter {
-        StringIter {
+    pub fn iter(&self) -> PrimitiveIter<'_, T> {
+        PrimitiveIter {
             index: 0,
             array: self,
         }
     }
 
     #[inline]
-    pub fn iter_opt(&self) -> StringOptIter {
-        StringOptIter {
+    pub fn iter_opt(&self) -> PrimitiveOptIter<'_, T> {
+        PrimitiveOptIter {
             index: 0,
             array: self,
         }
@@ -318,11 +383,11 @@ impl StringArray {
     pub fn concat(&self, other: &Self) -> Self {
         if let (Some(scalar_a), Some(scalar_b)) = (self.to_scalar(), other.to_scalar()) {
             if scalar_a == scalar_b {
-                return StringArray::new_scalar(self.len() + other.len(), scalar_a);
+                return PrimitiveArray::new_scalar(self.len() + other.len(), scalar_a);
             }
         }
 
-        let mut builder = StringBuilder::default();
+        let mut builder = PrimitiveBuilder::<T>::default();
         for value in self.iter_opt().chain(other.iter_opt()) {
             builder.append_opt(value);
         }
@@ -330,13 +395,13 @@ impl StringArray {
     }
 }
 
-pub struct StringIter<'a> {
+pub struct PrimitiveIter<'a, T: PrimitiveType> {
     index: usize,
-    array: &'a StringArray,
+    array: &'a PrimitiveArray<T>,
 }
 
-impl<'a> Iterator for StringIter<'a> {
-    type Item = &'a str;
+impl<'a, T: PrimitiveType> Iterator for PrimitiveIter<'a, T> {
+    type Item = T::Native;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -350,7 +415,7 @@ impl<'a> Iterator for StringIter<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for StringIter<'a> {
+impl<'a, T: PrimitiveType> DoubleEndedIterator for PrimitiveIter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.index == self.array.len() {
             None
@@ -362,13 +427,13 @@ impl<'a> DoubleEndedIterator for StringIter<'a> {
     }
 }
 
-pub struct StringOptIter<'a> {
+pub struct PrimitiveOptIter<'a, T: PrimitiveType> {
     index: usize,
-    array: &'a StringArray,
+    array: &'a PrimitiveArray<T>,
 }
 
-impl<'a> Iterator for StringOptIter<'a> {
-    type Item = Option<&'a str>;
+impl<'a, T: PrimitiveType> Iterator for PrimitiveOptIter<'a, T> {
+    type Item = Option<T::Native>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
@@ -382,7 +447,7 @@ impl<'a> Iterator for StringOptIter<'a> {
     }
 }
 
-impl<'a> DoubleEndedIterator for StringOptIter<'a> {
+impl<'a, T: PrimitiveType> DoubleEndedIterator for PrimitiveOptIter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.index == self.array.len() {
             None
@@ -394,7 +459,7 @@ impl<'a> DoubleEndedIterator for StringOptIter<'a> {
     }
 }
 
-impl Serialize for StringArray {
+impl<T: PrimitiveType> Serialize for PrimitiveArray<T> {
     fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
     where
         S: Serializer,
@@ -407,25 +472,26 @@ impl Serialize for StringArray {
     }
 }
 
+impl<'de, T: PrimitiveType> Deserialize<'de> for PrimitiveArray<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let values = Vec::<Option<T::Native>>::deserialize(deserializer)?;
+        Ok(Self::from_opt_vec(values))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::array::{ArrayExt, Scalar};
-
-    fn map_to_char(x: usize) -> char {
-        ((x % 58) + 65) as u8 as char
-    }
-
-    fn map_to_string(x: usize) -> String {
-        map_to_char(x).to_string()
-    }
+    use crate::array::{ArrayExt, Int32Array, Int32Builder, Scalar};
 
     fn create_array() -> ArrayRef {
-        let mut builder = StringBuilder::default();
-
+        let mut builder = Int32Builder::default();
         for x in 0..1000 {
             if x % 2 == 0 {
-                builder.append(map_to_string(x).as_str());
+                builder.append(x);
             } else {
                 builder.append_null();
             }
@@ -434,35 +500,35 @@ mod tests {
     }
 
     fn create_scalar_array() -> ArrayRef {
-        Arc::new(StringArray::new_scalar(1000, Some("hello")))
+        Arc::new(Int32Array::new_scalar(1000, Some(1)))
     }
 
     fn create_null_scalar_array() -> ArrayRef {
-        Arc::new(StringArray::new_scalar(1000, Option::<&'static str>::None))
+        Arc::new(Int32Array::new_scalar(1000, None))
     }
 
     #[test]
     fn test_array_as_any() {
         let array = create_array();
-        assert!(array.as_any().downcast_ref::<StringArray>().is_some());
+        assert!(array.as_any().downcast_ref::<Int32Array>().is_some());
     }
 
     #[test]
     fn test_scalar_array_as_any() {
         let array = create_scalar_array();
-        assert!(array.as_any().downcast_ref::<StringArray>().is_some());
+        assert!(array.as_any().downcast_ref::<Int32Array>().is_some());
     }
 
     #[test]
     fn test_array_data_type() {
         let array = create_array();
-        assert_eq!(array.data_type(), DataType::String);
+        assert_eq!(array.data_type(), DataType::Int32);
     }
 
     #[test]
     fn test_scalar_array_data_type() {
         let array = create_scalar_array();
-        assert_eq!(array.data_type(), DataType::String);
+        assert_eq!(array.data_type(), DataType::Int32);
     }
 
     #[test]
@@ -485,26 +551,23 @@ mod tests {
         let array = create_array();
         let slice = array.slice(0, 10);
         assert_eq!(slice.len(), 10);
-        let array_string = slice.downcast_ref::<StringArray>();
+        let array_i32 = slice.downcast_ref::<Int32Array>();
         for x in 0..10 {
             if x % 2 == 0 {
-                assert_eq!(array_string.value_opt(x), Some(map_to_string(x).as_str()));
+                assert_eq!(array_i32.value_opt(x), Some(x as i32));
             } else {
-                assert_eq!(array_string.value_opt(x), None);
+                assert_eq!(array_i32.value_opt(x), None);
             }
         }
 
         let slice = array.slice(990, 10);
         assert_eq!(slice.len(), 10);
-        let array_string = slice.downcast_ref::<StringArray>();
+        let array_i32 = slice.downcast_ref::<Int32Array>();
         for x in 990..1000 {
             if x % 2 == 0 {
-                assert_eq!(
-                    array_string.value_opt(x - 990),
-                    Some(map_to_string(x).as_str())
-                );
+                assert_eq!(array_i32.value_opt(x - 990), Some(x as i32));
             } else {
-                assert_eq!(array_string.value_opt(x - 990), None);
+                assert_eq!(array_i32.value_opt(x - 990), None);
             }
         }
     }
@@ -515,16 +578,16 @@ mod tests {
         let slice = array.slice(0, 10);
         assert_eq!(slice.len(), 10);
 
-        let array_string = slice.downcast_ref::<StringArray>();
+        let array_i32 = slice.downcast_ref::<Int32Array>();
         for x in 0..10 {
-            assert_eq!(array_string.value_opt(x), Some("hello"));
+            assert_eq!(array_i32.value_opt(x), Some(1));
         }
 
         let slice = array.slice(990, 10);
         assert_eq!(slice.len(), 10);
-        let array_string = slice.downcast_ref::<StringArray>();
+        let array_i32 = slice.downcast_ref::<Int32Array>();
         for x in 990..1000 {
-            assert_eq!(array_string.value_opt(x - 990), Some("hello"));
+            assert_eq!(array_i32.value_opt(x - 990), Some(1));
         }
     }
 
@@ -555,12 +618,12 @@ mod tests {
         let slice = array.truncate(10);
         assert_eq!(slice.len(), 10);
 
-        let array_string = slice.downcast_ref::<StringArray>();
+        let array_i32 = slice.downcast_ref::<Int32Array>();
         for x in 0..10 {
             if x % 2 == 0 {
-                assert_eq!(array_string.value_opt(x), Some(map_to_string(x).as_str()));
+                assert_eq!(array_i32.value_opt(x), Some(x as i32));
             } else {
-                assert_eq!(array_string.value_opt(x), None);
+                assert_eq!(array_i32.value_opt(x), None);
             }
         }
     }
@@ -571,9 +634,9 @@ mod tests {
         let slice = array.truncate(10);
         assert_eq!(slice.len(), 10);
 
-        let array_string = slice.downcast_ref::<StringArray>();
+        let array_i32 = slice.downcast_ref::<Int32Array>();
         for x in 0..10 {
-            assert_eq!(array_string.value_opt(x), Some("hello"));
+            assert_eq!(array_i32.value_opt(x), Some(1));
         }
     }
 
@@ -654,10 +717,7 @@ mod tests {
         let array = create_array();
         for x in 0..1000 {
             if x % 2 == 0 {
-                assert_eq!(
-                    array.scalar_value(x),
-                    Scalar::String(map_to_string(x).into())
-                );
+                assert_eq!(array.scalar_value(x), Scalar::Int32(x as i32));
             } else {
                 assert_eq!(array.scalar_value(x), Scalar::Null);
             }
@@ -668,102 +728,75 @@ mod tests {
     fn test_scalar_array_scalar_value() {
         let array = create_scalar_array();
         for x in 0..1000 {
-            assert_eq!(array.scalar_value(x), Scalar::String("hello".into()));
+            assert_eq!(array.scalar_value(x), Scalar::Int32(1));
         }
     }
 
     #[test]
     fn test_array_is_scalar_array() {
         let array = create_array();
-        assert!(!array.downcast_ref::<StringArray>().is_scalar_array());
+        assert!(!array.downcast_ref::<Int32Array>().is_scalar_array());
     }
 
     #[test]
     fn test_scalar_array_is_scalar_array() {
         let array = create_scalar_array();
-        assert!(array.downcast_ref::<StringArray>().is_scalar_array());
+        assert!(array.downcast_ref::<Int32Array>().is_scalar_array());
     }
 
     #[test]
     fn test_array_to_scalar() {
         let array = create_array();
-        let array_string = array.downcast_ref::<StringArray>();
-        assert_eq!(array_string.to_scalar(), None);
+        let array_i32 = array.downcast_ref::<Int32Array>();
+        assert_eq!(array_i32.to_scalar(), None);
     }
 
     #[test]
     fn test_scalar_array_to_scalar() {
         let array = create_scalar_array();
-        let array_string = array.downcast_ref::<StringArray>();
-        assert_eq!(array_string.to_scalar(), Some(Some("hello")));
+        let array_i32 = array.downcast_ref::<Int32Array>();
+        assert_eq!(array_i32.to_scalar(), Some(Some(1)));
 
         let array = create_null_scalar_array();
-        let array_string = array.downcast_ref::<StringArray>();
-        assert_eq!(array_string.to_scalar(), Some(None));
+        let array_i32 = array.downcast_ref::<Int32Array>();
+        assert_eq!(array_i32.to_scalar(), Some(None));
     }
 
     #[test]
     fn test_array_empty() {
-        let array = StringArray::empty();
+        let array = Int32Array::empty();
         assert!(array.is_empty());
         assert!(!array.is_scalar_array());
     }
 
     #[test]
     fn test_array_from_vec() {
-        let array = StringArray::from_vec(vec!["a", "b", "c", "d", "e"]);
+        let array = Int32Array::from_vec(vec![1, 2, 3, 4, 5]);
         assert_eq!(array.len(), 5);
-        let array_string = array.downcast_ref::<StringArray>();
-        assert_eq!(
-            array_string.iter().collect::<Vec<_>>(),
-            vec!["a", "b", "c", "d", "e"]
-        );
-
-        let array = StringArray::from_vec(
-            vec!["a", "b", "c", "d", "e"]
-                .iter()
-                .map(|str| str.to_owned())
-                .collect(),
-        );
-        assert_eq!(array.len(), 5);
-        let array_string = array.downcast_ref::<StringArray>();
-        assert_eq!(
-            array_string.iter().collect::<Vec<_>>(),
-            vec!["a", "b", "c", "d", "e"]
-                .iter()
-                .map(|str| str.to_owned())
-                .collect::<Vec<_>>()
-        );
+        let array_i32 = array.downcast_ref::<Int32Array>();
+        assert_eq!(array_i32.iter().collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
     }
 
     #[test]
     fn test_array_from_opt_vec() {
-        let array = StringArray::from_opt_vec(vec![Some("a"), None, Some("c"), None, Some("e")]);
+        let array = Int32Array::from_opt_vec(vec![Some(1), None, Some(3), None, Some(5)]);
         assert_eq!(array.len(), 5);
-        let array_string = array.downcast_ref::<StringArray>();
+        let array_i32 = array.downcast_ref::<Int32Array>();
         assert_eq!(
-            array_string.iter_opt().collect::<Vec<_>>(),
-            vec![Some("a"), None, Some("c"), None, Some("e")]
-        );
-
-        let array = StringArray::from_opt_vec(vec![Some("a"), None, Some("c"), None, Some("e")]);
-        assert_eq!(array.len(), 5);
-        let array_string = array.downcast_ref::<StringArray>();
-        assert_eq!(
-            array_string.iter_opt().collect::<Vec<_>>(),
-            vec![Some("a"), None, Some("c"), None, Some("e")]
+            array_i32.iter_opt().collect::<Vec<_>>(),
+            vec![Some(1), None, Some(3), None, Some(5)]
         );
     }
 
     #[test]
     fn test_array_value() {
         let array = create_array();
-        let array_string = array.downcast_ref::<StringArray>();
+        let array_i32 = array.downcast_ref::<Int32Array>();
         for x in 0..1000 {
             if x % 2 == 0 {
-                assert_eq!(array_string.value(x), map_to_string(x).as_str());
+                assert_eq!(array_i32.value(x), x as i32);
             } else {
-                assert_eq!(array_string.value(x), "");
+                assert_eq!(array_i32.value(x), 0);
             }
         }
     }
@@ -771,27 +804,27 @@ mod tests {
     #[test]
     fn test_scalar_array_value() {
         let array = create_scalar_array();
-        let array_string = array.downcast_ref::<StringArray>();
+        let array_i32 = array.downcast_ref::<Int32Array>();
         for x in 0..1000 {
-            assert_eq!(array_string.value(x), "hello");
+            assert_eq!(array_i32.value(x), 1);
         }
 
         let array = create_null_scalar_array();
-        let array_string = array.downcast_ref::<StringArray>();
+        let array_i32 = array.downcast_ref::<Int32Array>();
         for x in 0..1000 {
-            assert_eq!(array_string.value(x), "");
+            assert_eq!(array_i32.value(x), 0);
         }
     }
 
     #[test]
     fn test_array_value_opt() {
         let array = create_array();
-        let array_string = array.downcast_ref::<StringArray>();
+        let array_i32 = array.downcast_ref::<Int32Array>();
         for x in 0..1000 {
             if x % 2 == 0 {
-                assert_eq!(array_string.value_opt(x), Some(map_to_string(x).as_str()));
+                assert_eq!(array_i32.value_opt(x), Some(x as i32));
             } else {
-                assert_eq!(array_string.value_opt(x), None);
+                assert_eq!(array_i32.value_opt(x), None);
             }
         }
     }
@@ -799,12 +832,12 @@ mod tests {
     #[test]
     fn test_array_iter() {
         let array = create_array();
-        let array_string = array.downcast_ref::<StringArray>();
-        for (idx, value) in array_string.iter().enumerate() {
+        let array_i32 = array.downcast_ref::<Int32Array>();
+        for (idx, value) in array_i32.iter().enumerate() {
             if idx % 2 == 0 {
-                assert_eq!(map_to_string(idx).as_str(), value);
+                assert_eq!(idx as i32, value);
             } else {
-                assert_eq!("", value);
+                assert_eq!(0, value);
             }
         }
     }
@@ -812,13 +845,13 @@ mod tests {
     #[test]
     fn test_array_iter_rev() {
         let array = create_array();
-        let array_string = array.downcast_ref::<StringArray>();
-        for (idx, value) in array_string.iter().rev().enumerate() {
-            let idx = 1000 - idx - 1;
+        let array_i32 = array.downcast_ref::<Int32Array>();
+        for (idx, value) in array_i32.iter().rev().enumerate() {
+            let idx = 1000 - (idx as i32) - 1;
             if idx % 2 == 0 {
-                assert_eq!(map_to_string(idx).as_str(), value);
+                assert_eq!(idx, value);
             } else {
-                assert_eq!("", value);
+                assert_eq!(0, value);
             }
         }
     }
@@ -826,25 +859,25 @@ mod tests {
     #[test]
     fn test_scalar_array_iter() {
         let array = create_scalar_array();
-        let array_string = array.downcast_ref::<StringArray>();
-        for value in array_string.iter() {
-            assert_eq!(value, "hello");
+        let array_i32 = array.downcast_ref::<Int32Array>();
+        for value in array_i32.iter() {
+            assert_eq!(value, 1);
         }
 
         let array = create_null_scalar_array();
-        let array_string = array.downcast_ref::<StringArray>();
-        for value in array_string.iter() {
-            assert_eq!(value, "");
+        let array_i32 = array.downcast_ref::<Int32Array>();
+        for value in array_i32.iter() {
+            assert_eq!(value, 0);
         }
     }
 
     #[test]
     fn test_array_iter_opt() {
         let array = create_array();
-        let array_string = array.downcast_ref::<StringArray>();
-        for (idx, value) in array_string.iter_opt().enumerate() {
+        let array_i32 = array.downcast_ref::<Int32Array>();
+        for (idx, value) in array_i32.iter_opt().enumerate() {
             if idx % 2 == 0 {
-                assert_eq!(Some(map_to_string(idx).as_str()), value);
+                assert_eq!(Some(idx as i32), value);
             } else {
                 assert_eq!(None, value);
             }
@@ -854,11 +887,11 @@ mod tests {
     #[test]
     fn test_array_iter_opt_rev() {
         let array = create_array();
-        let array_string = array.downcast_ref::<StringArray>();
-        for (idx, value) in array_string.iter_opt().rev().enumerate() {
-            let idx = 1000 - idx - 1;
+        let array_i32 = array.downcast_ref::<Int32Array>();
+        for (idx, value) in array_i32.iter_opt().rev().enumerate() {
+            let idx = 1000 - (idx as i32) - 1;
             if idx % 2 == 0 {
-                assert_eq!(Some(map_to_string(idx as usize).as_str()), value);
+                assert_eq!(Some(idx), value);
             } else {
                 assert_eq!(None, value);
             }
@@ -868,14 +901,14 @@ mod tests {
     #[test]
     fn test_scalar_array_iter_opt() {
         let array = create_scalar_array();
-        let array_string = array.downcast_ref::<StringArray>();
-        for value in array_string.iter_opt() {
-            assert_eq!(value, Some("hello"));
+        let array_i32 = array.downcast_ref::<Int32Array>();
+        for value in array_i32.iter_opt() {
+            assert_eq!(value, Some(1));
         }
 
         let array = create_null_scalar_array();
-        let array_string = array.downcast_ref::<StringArray>();
-        for value in array_string.iter_opt() {
+        let array_i32 = array.downcast_ref::<Int32Array>();
+        for value in array_i32.iter_opt() {
             assert_eq!(value, None);
         }
     }
@@ -883,13 +916,13 @@ mod tests {
     #[test]
     fn test_array_concat() {
         let array = create_array()
-            .downcast_ref::<StringArray>()
-            .concat(create_array().downcast_ref::<StringArray>());
+            .downcast_ref::<Int32Array>()
+            .concat(create_array().downcast_ref::<Int32Array>());
         assert_eq!(array.len(), 2000);
 
         for x in 0..1000 {
             if x % 2 == 0 {
-                assert_eq!(array.value_opt(x), Some(map_to_string(x).as_str()));
+                assert_eq!(array.value_opt(x), Some(x as i32));
             } else {
                 assert_eq!(array.value_opt(x), None);
             }
@@ -897,7 +930,7 @@ mod tests {
 
         for x in 0..1000 {
             if x % 2 == 0 {
-                assert_eq!(array.value_opt(x + 1000), Some(map_to_string(x).as_str()));
+                assert_eq!(array.value_opt(x + 1000), Some(x as i32));
             } else {
                 assert_eq!(array.value_opt(x + 1000), None);
             }
@@ -906,24 +939,24 @@ mod tests {
 
     #[test]
     fn test_scalar_array_concat() {
-        let array = StringArray::new_scalar(1000, Some("hello"))
-            .concat(&StringArray::new_scalar(1000, Some("world")));
+        let array =
+            Int32Array::new_scalar(1000, Some(1)).concat(&Int32Array::new_scalar(1000, Some(2)));
         assert_eq!(array.len(), 2000);
         assert!(!array.is_scalar_array());
 
         for x in 0..1000 {
-            assert_eq!(array.value_opt(x), Some("hello"));
+            assert_eq!(array.value_opt(x), Some(1));
         }
         for x in 1000..2000 {
-            assert_eq!(array.value_opt(x), Some("world"));
+            assert_eq!(array.value_opt(x), Some(2));
         }
 
-        let array = StringArray::new_scalar(1000, Some("yql"))
-            .concat(&StringArray::new_scalar(500, Some("yql")));
+        let array =
+            Int32Array::new_scalar(1000, Some(3)).concat(&Int32Array::new_scalar(500, Some(3)));
         assert_eq!(array.len(), 1500);
         assert!(array.is_scalar_array());
         for x in 0..1500 {
-            assert_eq!(array.value_opt(x), Some("yql"));
+            assert_eq!(array.value_opt(x), Some(3));
         }
     }
 }

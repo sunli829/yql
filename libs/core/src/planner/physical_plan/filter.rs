@@ -1,4 +1,5 @@
-use crate::dataset::SchemaRef;
+use yql_dataset::dataset::SchemaRef;
+
 use crate::expr::physical_expr::PhysicalExpr;
 use crate::planner::physical_plan::PhysicalNode;
 

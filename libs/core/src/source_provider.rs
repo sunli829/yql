@@ -5,8 +5,7 @@ use futures_util::stream::BoxStream;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio_stream::StreamExt;
-
-use crate::dataset::{DataSet, SchemaRef};
+use yql_dataset::dataset::{DataSet, SchemaRef};
 
 pub struct GenericSourceDataSet<T> {
     pub state: T,

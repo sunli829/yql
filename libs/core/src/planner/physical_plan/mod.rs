@@ -4,7 +4,7 @@ mod projection;
 mod source;
 mod to_physical;
 
-use crate::dataset::SchemaRef;
+use yql_dataset::dataset::SchemaRef;
 
 pub use aggregate::PhysicalAggregateNode;
 pub use filter::PhysicalFilterNode;

@@ -3,7 +3,7 @@ use std::io::{Cursor, Read};
 use std::path::Path;
 
 use anyhow::Result;
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::array::{compute, ArrayRef, BooleanArray};
 use crate::dataset::{CsvOptions, SchemaRef};
@@ -112,5 +112,14 @@ impl PartialEq for DataSet {
             }
         }
         true
+    }
+}
+
+impl<'de> Deserialize<'de> for DataSet {
+    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        todo!()
     }
 }

@@ -1,8 +1,8 @@
 use anyhow::Result;
 use itertools::Itertools;
 use tokio_stream::StreamExt;
+use yql_dataset::dataset::DataSet;
 
-use crate::dataset::DataSet;
 use crate::execution::stream::{CreateStreamContext, Event, EventStream};
 use crate::execution::streams::create_stream;
 use crate::planner::physical_plan::PhysicalProjectionNode;

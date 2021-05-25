@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
+use yql_dataset::array::{ArrayRef, DataType};
+use yql_dataset::dataset::DataSet;
 
-use crate::array::{ArrayRef, DataType};
-use crate::dataset::DataSet;
 use crate::expr::func::StatefulFunction;
 use crate::expr::{cast, BinaryOperator, Literal, UnaryOperator};
 

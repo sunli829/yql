@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "libs/dataset",
     "libs/core",
     "libs/service",
 

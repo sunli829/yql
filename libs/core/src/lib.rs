@@ -1,5 +1,3 @@
-pub mod array;
-pub mod dataset;
 pub mod expr;
 pub mod sinks;
 pub mod sources;

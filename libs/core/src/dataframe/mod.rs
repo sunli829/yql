@@ -6,8 +6,8 @@ use anyhow::Result;
 use futures_util::future::BoxFuture;
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
+use yql_dataset::dataset::DataSet;
 
-use crate::dataset::DataSet;
 use crate::execution::stream::create_data_stream;
 use crate::expr::Expr;
 use crate::planner::logical_plan::{

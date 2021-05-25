@@ -1,8 +1,8 @@
 use anyhow::Result;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use yql_dataset::array::{ArrayRef, DataType};
 
-use crate::array::{ArrayRef, DataType};
 use crate::expr::signature::Signature;
 
 pub trait StatefulFunction: dyn_clone::DynClone + Sync + Send + 'static {

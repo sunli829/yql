@@ -2277,11 +2277,8 @@ dependencies = [
  "async-stream",
  "async-trait",
  "bincode",
- "bytes",
  "chrono",
  "chrono-tz",
- "comfy-table",
- "csv",
  "derive_more",
  "dyn-clone",
  "futures-util",
@@ -2290,12 +2287,28 @@ dependencies = [
  "once_cell",
  "ordered-float",
  "parking_lot",
- "regex",
  "serde",
  "smallvec",
  "tokio",
  "tokio-stream",
  "tracing",
+ "yql-dataset",
+]
+
+[[package]]
+name = "yql-dataset"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "chrono",
+ "chrono-tz",
+ "comfy-table",
+ "csv",
+ "derive_more",
+ "once_cell",
+ "regex",
+ "serde",
 ]
 
 [[package]]
