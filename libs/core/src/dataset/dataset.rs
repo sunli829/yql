@@ -3,11 +3,12 @@ use std::io::{Cursor, Read};
 use std::path::Path;
 
 use anyhow::Result;
+use serde::Serialize;
 
 use crate::array::{compute, ArrayRef, BooleanArray};
 use crate::dataset::{CsvOptions, SchemaRef};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct DataSet {
     schema: SchemaRef,
     columns: Vec<ArrayRef>,

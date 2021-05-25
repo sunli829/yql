@@ -107,6 +107,7 @@ impl ServiceInner {
     }
 }
 
+#[derive(Clone)]
 pub struct Service {
     inner: Arc<Mutex<ServiceInner>>,
 }
