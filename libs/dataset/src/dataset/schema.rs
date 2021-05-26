@@ -8,7 +8,6 @@ use crate::array::DataType;
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Field {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub qualifier: Option<String>,
     pub name: String,
     pub data_type: DataType,

@@ -2263,9 +2263,14 @@ checksum = "85e60b0d1b5f99db2556934e21937020776a5d31520bf169e851ac44e6420214"
 name = "yql-cli"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "futures-util",
  "reqwest",
  "rustyline",
+ "serde_json",
  "structopt",
+ "tokio",
+ "yql-dataset",
 ]
 
 [[package]]
@@ -2300,6 +2305,7 @@ name = "yql-dataset"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "bytes",
  "chrono",
  "chrono-tz",

@@ -2,12 +2,11 @@ use std::any::Any;
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 
-use serde::de::{Error, SeqAccess, Unexpected, Visitor};
+use serde::de::{SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::array::{Array, ArrayRef, DataType};
-use std::prelude::rust_2015::Result::Err;
 
 /// An Array where all elements are nulls.
 #[derive(Clone)]
@@ -93,26 +92,30 @@ impl<'de> Deserialize<'de> for NullArray {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_seq(NullArrayVisitor(0))
-    }
-}
+        struct ArrayVisitor(usize);
 
-struct NullArrayVisitor(usize);
+        impl<'de> Visitor<'de> for ArrayVisitor {
+            type Value = usize;
 
-impl<'de> Visitor<'de> for NullArrayVisitor {
-    type Value = usize;
+            fn expecting(&self, f: &mut Formatter) -> fmt::Result {
+                f.write_str("NullArray")
+            }
 
-    fn expecting(&self, f: &mut Formatter) -> fmt::Result {
-        f.write_str("NullArray")
-    }
-
-    fn visit_seq<A>(mut self, mut seq: A) -> Result<Self::Value, <A as SeqAccess<'de>>::Error>
-    where
-        A: SeqAccess<'de>,
-    {
-        while let Some(()) = seq.next_element::<()>()? {
-            self.0 += 1;
+            fn visit_seq<A>(
+                mut self,
+                mut seq: A,
+            ) -> Result<Self::Value, <A as SeqAccess<'de>>::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                while let Some(()) = seq.next_element::<()>()? {
+                    self.0 += 1;
+                }
+                Ok(self.0)
+            }
         }
-        Ok(self.0)
+
+        let len = deserializer.deserialize_seq(ArrayVisitor(0))?;
+        Ok(NullArray::new(len))
     }
 }

@@ -1,8 +1,8 @@
+use std::convert::Infallible;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use serde::Deserialize;
-use std::convert::Infallible;
 use structopt::StructOpt;
 use warp::http::StatusCode;
 use warp::{Filter, Reply};

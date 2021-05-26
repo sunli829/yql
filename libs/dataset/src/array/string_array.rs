@@ -9,6 +9,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::array::bitmap::{Bitmap, BitmapBuilder};
 use crate::array::{Array, ArrayBuilder, ArrayRef, DataType};
+use serde::de::{SeqAccess, Visitor};
 
 /// Array builder for string.
 #[derive(Default)]
@@ -412,8 +413,28 @@ impl<'de> Deserialize<'de> for StringArray {
     where
         D: Deserializer<'de>,
     {
-        let values = Vec::<Option<String>>::deserialize(deserializer)?;
-        Ok(Self::from_opt_vec(values))
+        struct ArrayVisitor;
+
+        impl<'de> Visitor<'de> for ArrayVisitor {
+            type Value = StringArray;
+
+            fn expecting(&self, f: &mut Formatter) -> fmt::Result {
+                f.write_str("Array")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut builder = StringBuilder::with_capacity(seq.size_hint().unwrap_or_default());
+                while let Some(value) = seq.next_element::<Option<&str>>()? {
+                    builder.append_opt(value);
+                }
+                Ok(builder.finish())
+            }
+        }
+
+        deserializer.deserialize_seq(ArrayVisitor)
     }
 }
 

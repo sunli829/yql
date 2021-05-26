@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use bytes::{BufMut, Bytes, BytesMut};
-use serde::de::DeserializeOwned;
+use serde::de::{DeserializeOwned, SeqAccess, Visitor};
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -477,8 +477,29 @@ impl<'de, T: PrimitiveType> Deserialize<'de> for PrimitiveArray<T> {
     where
         D: Deserializer<'de>,
     {
-        let values = Vec::<Option<T::Native>>::deserialize(deserializer)?;
-        Ok(Self::from_opt_vec(values))
+        struct ArrayVisitor<T>(PhantomData<T>);
+
+        impl<'de, T: PrimitiveType> Visitor<'de> for ArrayVisitor<T> {
+            type Value = PrimitiveArray<T>;
+
+            fn expecting(&self, f: &mut Formatter) -> fmt::Result {
+                f.write_str("Array")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut builder =
+                    PrimitiveBuilder::<T>::with_capacity(seq.size_hint().unwrap_or_default());
+                while let Some(value) = seq.next_element::<Option<T::Native>>()? {
+                    builder.append_opt(value);
+                }
+                Ok(builder.finish())
+            }
+        }
+
+        deserializer.deserialize_seq(ArrayVisitor(PhantomData))
     }
 }
 

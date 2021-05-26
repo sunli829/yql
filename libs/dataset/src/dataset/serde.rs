@@ -1,10 +1,14 @@
 use std::fmt::{self, Formatter};
+use std::sync::Arc;
 
-use serde::de::{DeserializeSeed, Error, SeqAccess, Unexpected, Visitor};
+use serde::de::{DeserializeSeed, Error, SeqAccess, Visitor};
 use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::array::{ArrayRef, DataType, Int8Type, NullArray, PrimitiveArray};
+use crate::array::{
+    ArrayRef, BooleanArray, DataType, Float32Array, Float64Array, Int16Array, Int32Array,
+    Int64Array, Int8Array, NullArray, StringArray, TimestampArray,
+};
 use crate::dataset::{DataSet, Field, SchemaRef};
 
 impl Serialize for DataSet {
@@ -47,17 +51,14 @@ impl<'de> Visitor<'de> for DataSetVisitor {
         let columns = seq
             .next_element_seed::<DeColumns>(DeColumns {
                 schema: schema.clone(),
-                columns: Vec::with_capacity(schema.fields().len()),
             })?
             .ok_or_else(|| Error::custom("invalid dataset"))?;
-
-        todo!()
+        Ok(DataSet::try_new(schema, columns).map_err(|err| Error::custom(err))?)
     }
 }
 
 struct DeColumns {
     schema: SchemaRef,
-    columns: Vec<ArrayRef>,
 }
 
 impl<'de> DeserializeSeed<'de> for DeColumns {
@@ -67,14 +68,14 @@ impl<'de> DeserializeSeed<'de> for DeColumns {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_seq(ArrayVisitor(self.schema.fields()))
+        deserializer.deserialize_seq(ColumnsVisitor(self.schema.fields()))
     }
 }
 
-struct ArrayVisitor<'a>(&'a [Field]);
+struct ColumnsVisitor<'a>(&'a [Field]);
 
-impl<'de, 'a> Visitor<'de> for ArrayVisitor<'a> {
-    type Value = ArrayRef;
+impl<'de, 'a> Visitor<'de> for ColumnsVisitor<'a> {
+    type Value = Vec<ArrayRef>;
 
     fn expecting(&self, f: &mut Formatter) -> fmt::Result {
         f.write_str("Columns")
@@ -84,26 +85,84 @@ impl<'de, 'a> Visitor<'de> for ArrayVisitor<'a> {
     where
         A: SeqAccess<'de>,
     {
+        let mut columns = Vec::with_capacity(self.0.len());
+
         while !self.0.is_empty() {
             let (field, tail) = self.0.split_first().unwrap();
 
             match field.data_type {
-                DataType::Null => {
-                    seq.next_element::<NullArray>()?;
-                }
-                DataType::Int8 => {}
-                DataType::Int16 => {}
-                DataType::Int32 => {}
-                DataType::Int64 => {}
-                DataType::Float32 => {}
-                DataType::Float64 => {}
-                DataType::Boolean => {}
-                DataType::Timestamp(_) => {}
-                DataType::String => {}
+                DataType::Null => columns.push(Arc::new(
+                    seq.next_element::<NullArray>()?
+                        .ok_or_else(|| Error::custom("expect array"))?,
+                ) as ArrayRef),
+                DataType::Int8 => columns.push(Arc::new(
+                    seq.next_element::<Int8Array>()?
+                        .ok_or_else(|| Error::custom("expect array"))?,
+                ) as ArrayRef),
+                DataType::Int16 => columns.push(Arc::new(
+                    seq.next_element::<Int16Array>()?
+                        .ok_or_else(|| Error::custom("expect array"))?,
+                ) as ArrayRef),
+                DataType::Int32 => columns.push(Arc::new(
+                    seq.next_element::<Int32Array>()?
+                        .ok_or_else(|| Error::custom("expect array"))?,
+                ) as ArrayRef),
+                DataType::Int64 => columns.push(Arc::new(
+                    seq.next_element::<Int64Array>()?
+                        .ok_or_else(|| Error::custom("expect array"))?,
+                ) as ArrayRef),
+                DataType::Float32 => columns.push(Arc::new(
+                    seq.next_element::<Float32Array>()?
+                        .ok_or_else(|| Error::custom("expect array"))?,
+                ) as ArrayRef),
+                DataType::Float64 => columns.push(Arc::new(
+                    seq.next_element::<Float64Array>()?
+                        .ok_or_else(|| Error::custom("expect array"))?,
+                ) as ArrayRef),
+                DataType::Boolean => columns.push(Arc::new(
+                    seq.next_element::<BooleanArray>()?
+                        .ok_or_else(|| Error::custom("expect array"))?,
+                ) as ArrayRef),
+                DataType::Timestamp(_) => columns.push(Arc::new(
+                    seq.next_element::<TimestampArray>()?
+                        .ok_or_else(|| Error::custom("expect array"))?,
+                ) as ArrayRef),
+                DataType::String => columns.push(Arc::new(
+                    seq.next_element::<StringArray>()?
+                        .ok_or_else(|| Error::custom("expect array"))?,
+                ) as ArrayRef),
             }
 
             self.0 = tail;
         }
-        todo!()
+
+        Ok(columns)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dataset::Schema;
+
+    #[test]
+    fn test_serde() {
+        let fields = vec![
+            Field::new("a", DataType::Int32),
+            Field::new("b", DataType::String),
+            Field::new("c", DataType::Timestamp(None)),
+        ];
+        let schema = Arc::new(Schema::try_new(fields).unwrap());
+
+        let columns = vec![
+            Arc::new(Int32Array::from_vec(vec![1, 3, 5, 7, 9])) as ArrayRef,
+            Arc::new(StringArray::from_vec(vec!["a", "b", "c", "d", "e"])),
+            Arc::new(TimestampArray::from_vec(vec![111, 333, 555, 777, 999])),
+        ];
+        let dataset = DataSet::try_new(schema, columns).unwrap();
+
+        let data = bincode::serialize(&dataset).unwrap();
+        let dataset2: DataSet = bincode::deserialize(&data).unwrap();
+        assert_eq!(dataset, dataset2);
     }
 }
