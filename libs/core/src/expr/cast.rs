@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use yql_dataset::array::{
+
+use crate::array::{
     Array, ArrayExt, ArrayRef, BooleanType, DataType, Float32Type, Float64Type, Int16Type,
     Int32Type, Int64Type, Int8Type, PrimitiveArray, PrimitiveBuilder, PrimitiveType, StringArray,
     StringBuilder,

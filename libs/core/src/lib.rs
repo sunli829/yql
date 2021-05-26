@@ -17,3 +17,4 @@ pub use sink_provider::{BoxSink, Sink, SinkProvider};
 pub use source_provider::{
     GenericSourceDataSet, GenericSourceProvider, SourceProvider, SourceProviderWrapper,
 };
+pub use yql_dataset::{array, dataset};

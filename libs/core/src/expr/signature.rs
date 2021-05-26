@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use yql_dataset::array::DataType;
+use crate::array::DataType;
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]

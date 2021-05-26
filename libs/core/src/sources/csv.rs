@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use futures_util::stream::BoxStream;
-use yql_dataset::dataset::{CsvOptions, SchemaRef};
 
+use crate::dataset::{CsvOptions, SchemaRef};
 use crate::{GenericSourceDataSet, GenericSourceProvider};
 
 const DEFAULT_BATCH_SIZE: usize = 1000;

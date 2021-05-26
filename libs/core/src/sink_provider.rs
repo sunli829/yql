@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use yql_dataset::dataset::DataSet;
+use crate::dataset::DataSet;
 
 #[async_trait::async_trait]
 pub trait Sink {

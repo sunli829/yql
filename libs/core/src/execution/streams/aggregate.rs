@@ -6,13 +6,13 @@ use anyhow::Result;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use tokio_stream::StreamExt;
-use yql_dataset::array::{
+
+use crate::array::{
     ArrayExt, ArrayRef, BooleanType, DataType, Float32Type, Float64Type, Int16Type, Int32Type,
     Int64Type, Int8Type, NullArray, PrimitiveBuilder, Scalar, StringBuilder, TimestampArray,
     TimestampType,
 };
-use yql_dataset::dataset::{DataSet, SchemaRef};
-
+use crate::dataset::{DataSet, SchemaRef};
 use crate::execution::dataset::{DataSetExt, GroupedKey};
 use crate::execution::stream::{CreateStreamContext, Event, EventStream};
 use crate::execution::streams::create_stream;

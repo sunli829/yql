@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
-use yql_dataset::array::{
+use crate::array::{
     Array, ArrayExt, DataType, Float32Array, Float32Builder, Float64Array, Float64Builder,
 };
-
 use crate::expr::func::{Function, FunctionType};
 use crate::expr::signature::Signature;
 

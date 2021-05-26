@@ -6,13 +6,13 @@ use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use yql_dataset::array::{
+
+use crate::array::{
     Array, ArrayExt, ArrayRef, BooleanArray, BooleanType, DataType, Float32Type, Float64Type,
     Int16Type, Int32Type, Int64Type, Int8Type, NullArray, PrimitiveArray, PrimitiveBuilder,
     StringArray, StringBuilder, TimestampArray, TimestampType,
 };
-use yql_dataset::dataset::DataSet;
-
+use crate::dataset::DataSet;
 use crate::expr::physical_expr::PhysicalExpr;
 use crate::planner::window::Window;
 

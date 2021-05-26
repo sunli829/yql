@@ -7,8 +7,8 @@ use anyhow::{Context as _, Result};
 use futures_util::stream::{BoxStream, StreamExt};
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::IntervalStream;
-use yql_dataset::dataset::DataSet;
 
+use crate::dataset::DataSet;
 use crate::execution::checkpoint::CheckPointBarrier;
 use crate::execution::execution_context::ExecutionContext;
 use crate::planner::logical_plan::LogicalPlan;

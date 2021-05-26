@@ -395,7 +395,7 @@ impl<'a> DoubleEndedIterator for StringOptIter<'a> {
 }
 
 impl Serialize for StringArray {
-    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -408,7 +408,7 @@ impl Serialize for StringArray {
 }
 
 impl<'de> Deserialize<'de> for StringArray {
-    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {

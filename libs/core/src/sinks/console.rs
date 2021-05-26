@@ -1,6 +1,6 @@
 use anyhow::Result;
-use yql_dataset::dataset::DataSet;
 
+use crate::dataset::DataSet;
 use crate::{BoxSink, Sink, SinkProvider};
 
 struct ConsoleSink;

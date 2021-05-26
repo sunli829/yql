@@ -1,7 +1,7 @@
 use anyhow::Result;
 use tokio_stream::StreamExt;
-use yql_dataset::array::{ArrayExt, BooleanArray};
 
+use crate::array::{ArrayExt, BooleanArray};
 use crate::execution::stream::{CreateStreamContext, Event, EventStream};
 use crate::execution::streams::create_stream;
 use crate::planner::physical_plan::PhysicalFilterNode;

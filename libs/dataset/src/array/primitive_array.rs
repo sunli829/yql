@@ -460,7 +460,7 @@ impl<'a, T: PrimitiveType> DoubleEndedIterator for PrimitiveOptIter<'a, T> {
 }
 
 impl<T: PrimitiveType> Serialize for PrimitiveArray<T> {
-    fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -473,7 +473,7 @@ impl<T: PrimitiveType> Serialize for PrimitiveArray<T> {
 }
 
 impl<'de, T: PrimitiveType> Deserialize<'de> for PrimitiveArray<T> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, <D as Deserializer<'de>>::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {

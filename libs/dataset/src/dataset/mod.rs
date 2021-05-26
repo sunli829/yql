@@ -3,6 +3,7 @@ mod csv_reader;
 mod dataset;
 mod display;
 mod schema;
+mod serde;
 
 pub use csv_reader::{CsvOptions, CsvReader};
 pub use dataset::DataSet;

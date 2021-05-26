@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use itertools::Itertools;
-use yql_dataset::array::DataType;
-use yql_dataset::dataset::{Field, Schema, SchemaRef};
 
+use crate::array::DataType;
+use crate::dataset::{Field, Schema, SchemaRef};
 use crate::expr::physical_expr::PhysicalExpr;
 use crate::expr::Expr;
 use crate::planner::logical_plan::{

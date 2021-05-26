@@ -2,7 +2,8 @@ use std::fmt::{self, Display, Formatter};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use yql_dataset::array::{
+
+use crate::array::{
     ArrayRef, BooleanArray, DataType, Float32Array, Float64Array, Int16Array, Int32Array,
     Int64Array, Int8Array, StringArray,
 };
