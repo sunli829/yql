@@ -117,3 +117,89 @@ impl DataType {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::DataType::*;
+
+    macro_rules! test_cast {
+        ($t:expr => $($mt1:tt ), + | $($mt2:tt ), +) => {
+            test_cast!(@check1 $t => $($mt1), + , $($mt2 ), +);
+            test_cast!(@check2 $t => $($mt1), + | $($mt2 ), + );
+        };
+
+        (@check1 $t:expr => $($mt:pat ), +) => {#[allow(unused_parens)] match $t {$($mt => {})+}};
+
+        (@check2 $t:expr => $data:tt , $($tail:tt)*) => {
+            test_cast!(@check3 $t => $data);
+            test_cast!(@check2 $t => $($tail)*);
+        };
+        (@check2 $t:expr => $data:tt | $($tail:tt)*) => {
+            test_cast!(@check3 $t => $data);
+            test_cast!(@check4 $t => $($tail)*);
+        };
+
+        (@check3 $t:expr =>)=>{};
+        (@check3 $t:expr => ($data:tt(_))) => {assert!($t.can_cast_to($data(None)));};
+        (@check3 $t:expr => $data:tt) => {assert!($t.can_cast_to($data));};
+
+        (@check4 $t:expr => $data:tt , $($tail:tt)*) => {
+            test_cast!(@check4 $t => $data);
+            test_cast!(@check4 $t => $($tail)*);
+        };
+
+        (@check4 $t:expr =>)=>{};
+        (@check4 $t:expr => ($data:tt(_))) => {assert!(!$t.can_cast_to($data(None)));};
+        (@check4 $t:expr => $data:tt) => {assert!(!$t.can_cast_to($data));};
+}
+
+    #[test]
+    fn test_null_can_cast() {
+        test_cast!(Null => Null, String | Int8, Int16, Int32, Int64, Float32, Float64, Boolean, (Timestamp(_)));
+    }
+
+    #[test]
+    fn test_int8_can_cast() {
+        test_cast!(Int8 => Int8, Int16, Int32, Int64, Float32, Float64, String | Null, Boolean, (Timestamp(_)));
+    }
+
+    #[test]
+    fn test_int16_can_cast() {
+        test_cast!(Int16 => Int16, Int32, Int64, Float32, Float64, String | Null, Int8, Boolean, (Timestamp(_)));
+    }
+
+    #[test]
+    fn test_int32_can_cast() {
+        test_cast!(Int32 => Int32, Int64, Float32, Float64, String | Null, Int8, Int16, Boolean, (Timestamp(_)));
+    }
+
+    #[test]
+    fn test_int64_can_cast() {
+        test_cast!(Int64 => Int64, Float32, Float64, String | Null, Int8, Int16, Int32, Boolean, (Timestamp(_)));
+    }
+
+    #[test]
+    fn test_float32_can_cast() {
+        test_cast!(Float32 => Float32, Float64, String | Null, Int8, Int16, Int32, Int64, Boolean, (Timestamp(_)));
+    }
+
+    #[test]
+    fn test_float64_can_cast() {
+        test_cast!(Float64 => Float64, String | Null, Int8, Int16, Int32, Int64, Float32, Boolean, (Timestamp(_)));
+    }
+
+    #[test]
+    fn test_boolean_can_cast() {
+        test_cast!(Boolean => Boolean, String | Null, Int8, Int16, Int32, Int64, Float32, Float64, (Timestamp(_)));
+    }
+
+    #[test]
+    fn test_timestamp_can_cast() {
+        test_cast!(Timestamp(None) => (Timestamp(_)), String | Null, Int8, Int16, Int32, Int64, Float32, Float64, Boolean);
+    }
+
+    #[test]
+    fn test_string_can_cast() {
+        test_cast!(String =>  String | Null, Int8, Int16, Int32, Int64, Float32, Float64, Boolean, (Timestamp(_)));
+    }
+}
