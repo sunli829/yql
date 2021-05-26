@@ -27,49 +27,62 @@ impl Display for DataSet {
 
         table.set_header(self.schema().fields().iter().map(|field| &field.name));
 
-        for row in 0..self.len() {
-            let mut table_row = Row::new();
+        if self.is_empty() {
+            table.add_row(Row::from(vec!["No data!"]));
+        } else {
+            for row in 0..self.len() {
+                let mut table_row = Row::new();
 
-            for (column, field) in self.schema().fields().iter().enumerate() {
-                let _ = match field.data_type {
-                    DataType::Null => table_row.add_cell(Cell::new("null")),
-                    DataType::Int8 => add_table_cell!(table_row, self, row, column, Int8Array),
-                    DataType::Int16 => add_table_cell!(table_row, self, row, column, Int16Array),
-                    DataType::Int32 => add_table_cell!(table_row, self, row, column, Int32Array),
-                    DataType::Int64 => add_table_cell!(table_row, self, row, column, Int64Array),
-                    DataType::Float32 => {
-                        add_table_cell!(table_row, self, row, column, Float32Array)
-                    }
-                    DataType::Float64 => {
-                        add_table_cell!(table_row, self, row, column, Float64Array)
-                    }
-                    DataType::Boolean => {
-                        add_table_cell!(table_row, self, row, column, BooleanArray)
-                    }
-                    DataType::String => add_table_cell!(table_row, self, row, column, StringArray),
-                    DataType::Timestamp(Some(tz)) => table_row.add_cell(Cell::new(
-                        tz.timestamp_millis(
-                            self.columns()[column]
-                                .as_any()
-                                .downcast_ref::<TimestampArray>()
-                                .unwrap()
-                                .value(row),
-                        ),
-                    )),
-                    DataType::Timestamp(None) => table_row.add_cell(Cell::new(
-                        chrono::Local.timestamp_millis(
-                            self.columns()[column]
-                                .as_any()
-                                .downcast_ref::<TimestampArray>()
-                                .unwrap()
-                                .value(row),
-                        ),
-                    )),
-                };
+                for (column, field) in self.schema().fields().iter().enumerate() {
+                    let _ = match field.data_type {
+                        DataType::Null => table_row.add_cell(Cell::new("null")),
+                        DataType::Int8 => add_table_cell!(table_row, self, row, column, Int8Array),
+                        DataType::Int16 => {
+                            add_table_cell!(table_row, self, row, column, Int16Array)
+                        }
+                        DataType::Int32 => {
+                            add_table_cell!(table_row, self, row, column, Int32Array)
+                        }
+                        DataType::Int64 => {
+                            add_table_cell!(table_row, self, row, column, Int64Array)
+                        }
+                        DataType::Float32 => {
+                            add_table_cell!(table_row, self, row, column, Float32Array)
+                        }
+                        DataType::Float64 => {
+                            add_table_cell!(table_row, self, row, column, Float64Array)
+                        }
+                        DataType::Boolean => {
+                            add_table_cell!(table_row, self, row, column, BooleanArray)
+                        }
+                        DataType::String => {
+                            add_table_cell!(table_row, self, row, column, StringArray)
+                        }
+                        DataType::Timestamp(Some(tz)) => table_row.add_cell(Cell::new(
+                            tz.timestamp_millis(
+                                self.columns()[column]
+                                    .as_any()
+                                    .downcast_ref::<TimestampArray>()
+                                    .unwrap()
+                                    .value(row),
+                            ),
+                        )),
+                        DataType::Timestamp(None) => table_row.add_cell(Cell::new(
+                            chrono::Local.timestamp_millis(
+                                self.columns()[column]
+                                    .as_any()
+                                    .downcast_ref::<TimestampArray>()
+                                    .unwrap()
+                                    .value(row),
+                            ),
+                        )),
+                    };
+                }
+
+                table.add_row(table_row);
             }
-
-            table.add_row(table_row);
         }
+
         table.fmt(f)
     }
 }

@@ -73,6 +73,23 @@ pub struct StmtStopStream {
     pub name: String,
 }
 
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum ShowType {
+    Sources,
+    Streams,
+    Sinks,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct StmtShow {
+    pub show_type: ShowType,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct StmtSelect {
+    pub select: Select,
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Stmt {
     CreateSource(StmtCreateSource),
@@ -83,6 +100,8 @@ pub enum Stmt {
     DeleteSink(StmtDeleteSink),
     StartStream(StmtStartStream),
     StopStream(StmtStopStream),
+    Show(StmtShow),
+    Select(StmtSelect),
 }
 
 fn timezone(input: &str) -> IResult<&str, Tz> {
@@ -290,6 +309,22 @@ fn stmt_stop_stream(input: &str) -> IResult<&str, StmtStopStream> {
     )(input)
 }
 
+fn stmt_show_stream(input: &str) -> IResult<&str, StmtShow> {
+    let show_type = alt((
+        value(ShowType::Sources, tag_no_case("sources")),
+        value(ShowType::Streams, tag_no_case("streams")),
+        value(ShowType::Sinks, tag_no_case("sinks")),
+    ));
+
+    context(
+        "stmt_show_stream",
+        map(
+            tuple((tag_no_case("show"), sp, show_type)),
+            |(_, _, show_type)| StmtShow { show_type },
+        ),
+    )(input)
+}
+
 pub fn stmt(input: &str) -> IResult<&str, Stmt> {
     context(
         "stmt",
@@ -303,6 +338,10 @@ pub fn stmt(input: &str) -> IResult<&str, Stmt> {
                 map(delimited(sp, stmt_delete_sink, sp), Stmt::DeleteSink),
                 map(delimited(sp, stmt_start_stream, sp), Stmt::StartStream),
                 map(delimited(sp, stmt_stop_stream, sp), Stmt::StopStream),
+                map(delimited(sp, stmt_show_stream, sp), Stmt::Show),
+                map(delimited(sp, select, sp), |select| {
+                    Stmt::Select(StmtSelect { select })
+                }),
             )),
             eof,
         ),

@@ -3,9 +3,11 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use futures_util::future::FutureExt;
+use futures_util::stream::BoxStream;
+use itertools::Itertools;
 use once_cell::sync::Lazy;
 use tokio::sync::{oneshot, Mutex};
-use yql_core::array::{ArrayRef, BooleanBuilder, DataType, StringBuilder};
+use yql_core::array::{ArrayRef, BooleanBuilder, DataType, StringArray, StringBuilder};
 use yql_core::dataset::{DataSet, Field, Schema, SchemaRef};
 use yql_core::sql::SqlSourceProvider;
 use yql_core::{DataFrame, ExecutionContext, SinkProvider};
@@ -14,15 +16,41 @@ use crate::registry::Registry;
 use crate::sink_provider::create_sink_provider;
 use crate::source_provider::create_source_provider;
 use crate::sql::{
-    Stmt, StmtCreateSink, StmtCreateSource, StmtCreateStream, StmtDeleteSink, StmtDeleteSource,
-    StmtDeleteStream, StmtStartStream, StmtStopStream,
+    ShowType, Stmt, StmtCreateSink, StmtCreateSource, StmtCreateStream, StmtDeleteSink,
+    StmtDeleteSource, StmtDeleteStream, StmtShow, StmtStartStream, StmtStopStream,
 };
 use crate::storage::{Definition, SourceDefinition, Storage, StreamState};
+use crate::{SinkDefinition, StreamDefinition};
 
 static ACTION_RESULT_SCHEMA: Lazy<SchemaRef> = Lazy::new(|| {
     let fields = vec![
         Field::new("action", DataType::String),
         Field::new("success", DataType::Boolean),
+    ];
+    Arc::new(Schema::try_new(fields).unwrap())
+});
+
+static SHOW_SOURCES_SCHEMA: Lazy<SchemaRef> = Lazy::new(|| {
+    let fields = vec![
+        Field::new("name", DataType::String),
+        Field::new("uri", DataType::String),
+    ];
+    Arc::new(Schema::try_new(fields).unwrap())
+});
+
+static SHOW_STREAMS_SCHEMA: Lazy<SchemaRef> = Lazy::new(|| {
+    let fields = vec![
+        Field::new("name", DataType::String),
+        Field::new("to", DataType::String),
+        Field::new("status", DataType::String),
+    ];
+    Arc::new(Schema::try_new(fields).unwrap())
+});
+
+static SHOW_SINKS_SCHEMA: Lazy<SchemaRef> = Lazy::new(|| {
+    let fields = vec![
+        Field::new("name", DataType::String),
+        Field::new("uri", DataType::String),
     ];
     Arc::new(Schema::try_new(fields).unwrap())
 });
@@ -123,18 +151,20 @@ impl Service {
         })
     }
 
-    pub async fn execute(&self, sql: &str) -> Result<DataSet> {
+    pub async fn execute(&self, sql: &str) -> Result<BoxStream<'static, Result<DataSet>>> {
         let (_, stmt) = crate::sql::stmt(sql).map_err(|err| anyhow::anyhow!("{}", err))?;
 
         match stmt {
-            Stmt::CreateSource(stmt) => self.execute_create_source(stmt).await,
-            Stmt::CreateStream(stmt) => self.execute_create_stream(stmt).await,
-            Stmt::CreateSink(stmt) => self.execute_create_sink(stmt).await,
-            Stmt::DeleteSource(stmt) => self.execute_delete_source(stmt).await,
-            Stmt::DeleteStream(stmt) => self.execute_delete_stream(stmt).await,
-            Stmt::DeleteSink(stmt) => self.execute_delete_sink(stmt).await,
-            Stmt::StartStream(stmt) => self.execute_start_stream(stmt).await,
-            Stmt::StopStream(stmt) => self.execute_stop_stream(stmt).await,
+            Stmt::CreateSource(stmt) => Ok(once_stream(self.execute_create_source(stmt).await?)),
+            Stmt::CreateStream(stmt) => Ok(once_stream(self.execute_create_stream(stmt).await?)),
+            Stmt::CreateSink(stmt) => Ok(once_stream(self.execute_create_sink(stmt).await?)),
+            Stmt::DeleteSource(stmt) => Ok(once_stream(self.execute_delete_source(stmt).await?)),
+            Stmt::DeleteStream(stmt) => Ok(once_stream(self.execute_delete_stream(stmt).await?)),
+            Stmt::DeleteSink(stmt) => Ok(once_stream(self.execute_delte_sink(stmt).await?)),
+            Stmt::StartStream(stmt) => Ok(once_stream(self.execute_start_stream(stmt).await?)),
+            Stmt::StopStream(stmt) => Ok(once_stream(self.execute_stop_stream(stmt).await?)),
+            Stmt::Show(stmt) => Ok(once_stream(self.execute_show(stmt).await?)),
+            Stmt::Select(_) => unreachable!(),
         }
     }
 
@@ -165,6 +195,14 @@ impl Service {
             "already exists"
         );
 
+        inner
+            .storage
+            .create_definition(Definition::Stream(StreamDefinition {
+                name: stmt.name,
+                select: stmt.select,
+                to: stmt.to,
+            }))?;
+
         create_action_result_dataset("Create Stream", true)
     }
 
@@ -174,6 +212,13 @@ impl Service {
             !inner.storage.definition_exists(&stmt.name)?,
             "already exists"
         );
+
+        inner
+            .storage
+            .create_definition(Definition::Sink(SinkDefinition {
+                name: stmt.name,
+                uri: stmt.uri,
+            }))?;
 
         create_action_result_dataset("Create Sink", true)
     }
@@ -286,4 +331,107 @@ impl Service {
         inner.registry.stop(&stmt.name);
         create_action_result_dataset("Stop Stream", true)
     }
+
+    async fn execute_show(&self, stmt: StmtShow) -> Result<DataSet> {
+        let inner = self.inner.lock().await;
+
+        match stmt.show_type {
+            ShowType::Sources => {
+                let sources = inner
+                    .storage
+                    .definition_list()?
+                    .into_iter()
+                    .filter_map(|definition| match definition {
+                        Definition::Source(source_definition) => Some(source_definition),
+                        _ => None,
+                    })
+                    .collect_vec();
+                DataSet::try_new(
+                    SHOW_SOURCES_SCHEMA.clone(),
+                    vec![
+                        Arc::new(
+                            sources
+                                .iter()
+                                .map(|source| &source.name)
+                                .collect::<StringArray>(),
+                        ),
+                        Arc::new(
+                            sources
+                                .iter()
+                                .map(|source| &source.uri)
+                                .collect::<StringArray>(),
+                        ),
+                    ],
+                )
+            }
+            ShowType::Streams => {
+                let streams = inner
+                    .storage
+                    .definition_list()?
+                    .into_iter()
+                    .filter_map(|definition| match definition {
+                        Definition::Stream(stream_definition) => Some(stream_definition),
+                        _ => None,
+                    })
+                    .collect_vec();
+                let status = streams
+                    .iter()
+                    .map(|stream| inner.storage.get_stream_state(&stream.name))
+                    .collect_vec();
+                let streams = streams
+                    .into_iter()
+                    .zip(status)
+                    .filter_map(|(stream_definition, status)| match status {
+                        Ok(Some(status)) => Some((stream_definition, status)),
+                        _ => None,
+                    })
+                    .collect_vec();
+                DataSet::try_new(
+                    SHOW_STREAMS_SCHEMA.clone(),
+                    vec![
+                        Arc::new(
+                            streams
+                                .iter()
+                                .map(|(stream, _)| &stream.name)
+                                .collect::<StringArray>(),
+                        ),
+                        Arc::new(
+                            streams
+                                .iter()
+                                .map(|(stream, _)| &stream.to)
+                                .collect::<StringArray>(),
+                        ),
+                        Arc::new(
+                            streams
+                                .iter()
+                                .map(|(_, status)| status.to_string())
+                                .collect::<StringArray>(),
+                        ),
+                    ],
+                )
+            }
+            ShowType::Sinks => {
+                let sinks = inner
+                    .storage
+                    .definition_list()?
+                    .into_iter()
+                    .filter_map(|definition| match definition {
+                        Definition::Sink(sink_definition) => Some(sink_definition),
+                        _ => None,
+                    })
+                    .collect_vec();
+                DataSet::try_new(
+                    SHOW_SINKS_SCHEMA.clone(),
+                    vec![
+                        Arc::new(sinks.iter().map(|sink| &sink.name).collect::<StringArray>()),
+                        Arc::new(sinks.iter().map(|sink| &sink.uri).collect::<StringArray>()),
+                    ],
+                )
+            }
+        }
+    }
+}
+
+fn once_stream(dataset: DataSet) -> BoxStream<'static, Result<DataSet>> {
+    Box::pin(futures_util::stream::once(async move { Ok(dataset) }))
 }

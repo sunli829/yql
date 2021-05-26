@@ -1,5 +1,6 @@
 use anyhow::Result;
 use futures_util::TryFutureExt;
+use std::path::PathBuf;
 use structopt::StructOpt;
 use yql_dataset::dataset::DataSet;
 
@@ -11,6 +12,10 @@ struct Options {
     url: String,
 }
 
+fn history_path() -> Option<PathBuf> {
+    dirs::document_dir().map(|path| path.join(".yql-cli-history"))
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let options: Options = Options::from_args();
@@ -18,12 +23,17 @@ async fn main() -> Result<()> {
 
     let mut rl = rustyline::Editor::<()>::new();
 
+    if let Some(path) = history_path() {
+        let _ = rl.history_mut().load(&path);
+    }
+
     loop {
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
+                rl.history_mut().add(&line);
                 let res = cli
-                    .post(&options.url)
+                    .post(&format!("{}/sql", options.url))
                     .json(&serde_json::json!({
                         "sql": line,
                     }))
@@ -44,6 +54,10 @@ async fn main() -> Result<()> {
             }
             Err(_) => break,
         }
+    }
+
+    if let Some(path) = history_path() {
+        let _ = rl.history_mut().save(&path);
     }
 
     Ok(())

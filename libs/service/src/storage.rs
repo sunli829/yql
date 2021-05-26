@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
+use derive_more::Display;
 use rocksdb::{DBCompressionType, Options, DB};
 use serde::{Deserialize, Serialize};
 use yql_core::dataset::SchemaRef;
@@ -36,12 +37,21 @@ pub enum Definition {
     Sink(SinkDefinition),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Display)]
 pub enum StreamState {
+    #[display(fmt = "created")]
     Created,
+
+    #[display(fmt = "started")]
     Started,
+
+    #[display(fmt = "stop")]
     Stop,
+
+    #[display(fmt = "finish")]
     Finish,
+
+    #[display(fmt = "error: {}", _0)]
     Error(String),
 }
 

@@ -5,7 +5,8 @@ use anyhow::Result;
 use serde::Deserialize;
 use structopt::StructOpt;
 use warp::http::StatusCode;
-use warp::{Filter, Reply};
+use warp::hyper::body::Bytes;
+use warp::{Filter, Reply, Stream};
 use yql_service::Service;
 
 #[derive(Debug, StructOpt)]
@@ -18,6 +19,12 @@ struct Options {
 #[derive(Deserialize)]
 struct ExecuteSql {
     sql: String,
+}
+
+fn create_body_stream(
+    stream: impl Stream<Item = Result<DataSet>> + Unpin + Send + 'static,
+) -> impl Stream<Item = Result<Bytes>> + Send + 'static {
+    async_stream::try_stream! {}
 }
 
 #[tokio::main]
@@ -33,10 +40,11 @@ async fn main() -> Result<()> {
             move |req: ExecuteSql| {
                 let service = service.clone();
                 async move {
-                    match service.execute(&req.sql).await {
-                        Ok(dataset) => {
-                            Ok::<_, Infallible>(warp::reply::json(&dataset).into_response())
-                        }
+                    let res = service.execute(&req.sql).await;
+                    match res {
+                        Ok(stream) => Ok::<_, Infallible>(
+                            warp::reply::Response::new(create_body_stream(stream)).into_response(),
+                        ),
                         Err(err) => Ok(warp::reply::with_status(
                             err.to_string(),
                             StatusCode::BAD_REQUEST,
