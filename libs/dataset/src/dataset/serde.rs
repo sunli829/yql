@@ -53,7 +53,7 @@ impl<'de> Visitor<'de> for DataSetVisitor {
                 schema: schema.clone(),
             })?
             .ok_or_else(|| Error::custom("invalid dataset"))?;
-        Ok(DataSet::try_new(schema, columns).map_err(|err| Error::custom(err))?)
+        DataSet::try_new(schema, columns).map_err(Error::custom)
     }
 }
 
