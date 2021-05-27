@@ -24,6 +24,7 @@ pub enum Expr {
         expr: Box<Expr>,
     },
     Call {
+        namespace: Option<String>,
         name: String,
         args: Vec<Expr>,
     },

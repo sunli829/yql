@@ -9,6 +9,7 @@ use crate::expr::func::{AggregateFunction, Function, FunctionType};
 use crate::expr::signature::Signature;
 
 pub const AVG: Function = Function {
+    namespace: None,
     name: "avg",
     signature: &Signature::Uniform(1, &[DataType::Float64]),
     return_type: |_| DataType::Float64,
@@ -29,6 +30,7 @@ pub const AVG: Function = Function {
 };
 
 pub const SUM: Function = Function {
+    namespace: None,
     name: "sum",
     signature: &Signature::Uniform(1, &[DataType::Float64]),
     return_type: |_| DataType::Float64,
@@ -48,6 +50,7 @@ pub const SUM: Function = Function {
 };
 
 pub const COUNT: Function = Function {
+    namespace: None,
     name: "count",
     signature: &Signature::Any(1),
     return_type: |_| DataType::Float64,
@@ -97,6 +100,7 @@ macro_rules! max_min {
 macro_rules! make_max_min_func {
     ($ident:ident, $name:literal, $func:ident) => {
         pub const $ident: Function = Function {
+            namespace: None,
             name: $name,
             signature: &Signature::Uniform(
                 1,
@@ -172,6 +176,7 @@ macro_rules! first_value {
 }
 
 pub const FIRST: Function = Function {
+    namespace: None,
     name: "first",
     signature: &Signature::Any(1),
     return_type: |args| args[0],
@@ -242,6 +247,7 @@ macro_rules! last_value {
 }
 
 pub const LAST: Function = Function {
+    namespace: None,
     name: "last",
     signature: &Signature::Any(1),
     return_type: |args| args[0],

@@ -52,6 +52,7 @@ fn to_physical(ctx: &mut Context, expr: Expr) -> Result<PhysicalNode> {
             ))
         }
         Expr::Call {
+            namespace,
             name,
             args: arguments,
         } => {

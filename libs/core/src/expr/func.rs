@@ -74,6 +74,7 @@ impl FunctionType {
 }
 
 pub struct Function {
+    pub namespace: Option<&'static str>,
     pub name: &'static str,
     pub signature: &'static Signature,
     pub return_type: fn(&[DataType]) -> DataType,

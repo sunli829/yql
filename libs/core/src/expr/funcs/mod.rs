@@ -1,8 +1,12 @@
 mod aggregate;
 mod math;
 
+mod f_ref;
+
 use aggregate::*;
 use math::*;
+
+use f_ref::*;
 
 use crate::expr::func::Function;
 
@@ -13,4 +17,7 @@ pub const FUNCS: &[Function] = &[
     
     // aggregate
     AVG, SUM, COUNT, MIN, MAX, FIRST, LAST,
+    
+    // ref
+    ALL, ANY,
 ];

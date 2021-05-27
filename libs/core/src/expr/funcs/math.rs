@@ -9,6 +9,7 @@ use crate::expr::signature::Signature;
 macro_rules! make_math_func {
     ($ident:ident, $name:literal, $func:ident) => {
         pub const $ident: Function = Function {
+            namespace: None,
             name: $name,
             signature: &Signature::Uniform(1, &[DataType::Float64, DataType::Float32]),
             return_type: |args| args[0],

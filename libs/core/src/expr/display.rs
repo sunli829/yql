@@ -13,10 +13,14 @@ impl Display for Expr {
             Expr::Binary { op, lhs, rhs } => write!(f, "({} {} {})", lhs, op, rhs),
             Expr::Unary { op, expr } => write!(f, "{} {}", op, expr),
             Expr::Call {
+                namespace,
                 name,
                 args: arguments,
             } => {
-                write!(f, "{}", name)?;
+                match namespace {
+                    Some(namespace) => write!(f, "{}.{}", namespace, name)?,
+                    None => write!(f, "{}", name)?,
+                }
                 f.write_char('(')?;
                 for (idx, argument) in arguments.iter().enumerate() {
                     if idx > 0 {
