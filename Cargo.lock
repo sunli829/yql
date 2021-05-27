@@ -778,9 +778,9 @@ checksum = "6456b8a6c8f33fee7d958fcd1b60d55b11940a79e63ae87013e6d22e26034440"
 
 [[package]]
 name = "hyper"
-version = "0.14.7"
+version = "0.14.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e5f105c494081baa3bf9e200b279e27ec1623895cd504c7dbef8d0b080fcf54"
+checksum = "d3f71a7eea53a3f8257a7b4795373ff886397178cd634430ea94e12d7fe4fe34"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -1863,8 +1863,11 @@ dependencies = [
  "memchr",
  "mio",
  "num_cpus",
+ "once_cell",
  "pin-project-lite",
+ "signal-hook-registry",
  "tokio-macros",
+ "winapi",
 ]
 
 [[package]]
@@ -2284,6 +2287,9 @@ name = "yql-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-stream",
+ "bincode",
+ "bytes",
  "dirs",
  "futures-util",
  "reqwest",
@@ -2344,11 +2350,15 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-stream",
+ "bincode",
+ "bytes",
+ "futures-util",
+ "hyper",
  "serde",
- "serde_json",
  "structopt",
  "tokio",
  "warp",
+ "yql-core",
  "yql-service",
 ]
 

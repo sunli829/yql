@@ -17,7 +17,7 @@ use crate::sink_provider::create_sink_provider;
 use crate::source_provider::create_source_provider;
 use crate::sql::{
     ShowType, Stmt, StmtCreateSink, StmtCreateSource, StmtCreateStream, StmtDeleteSink,
-    StmtDeleteSource, StmtDeleteStream, StmtShow, StmtStartStream, StmtStopStream,
+    StmtDeleteSource, StmtDeleteStream, StmtSelect, StmtShow, StmtStartStream, StmtStopStream,
 };
 use crate::storage::{Definition, SourceDefinition, Storage, StreamState};
 use crate::{SinkDefinition, StreamDefinition};
@@ -160,11 +160,11 @@ impl Service {
             Stmt::CreateSink(stmt) => Ok(once_stream(self.execute_create_sink(stmt).await?)),
             Stmt::DeleteSource(stmt) => Ok(once_stream(self.execute_delete_source(stmt).await?)),
             Stmt::DeleteStream(stmt) => Ok(once_stream(self.execute_delete_stream(stmt).await?)),
-            Stmt::DeleteSink(stmt) => Ok(once_stream(self.execute_delte_sink(stmt).await?)),
+            Stmt::DeleteSink(stmt) => Ok(once_stream(self.execute_delete_sink(stmt).await?)),
             Stmt::StartStream(stmt) => Ok(once_stream(self.execute_start_stream(stmt).await?)),
             Stmt::StopStream(stmt) => Ok(once_stream(self.execute_stop_stream(stmt).await?)),
             Stmt::Show(stmt) => Ok(once_stream(self.execute_show(stmt).await?)),
-            Stmt::Select(_) => unreachable!(),
+            Stmt::Select(stmt) => self.execute_select(stmt).await,
         }
     }
 
@@ -429,6 +429,16 @@ impl Service {
                 )
             }
         }
+    }
+
+    async fn execute_select(
+        &self,
+        stmt: StmtSelect,
+    ) -> Result<BoxStream<'static, Result<DataSet>>> {
+        let inner = self.inner.lock().await;
+        let df = DataFrame::from_sql_select(&SqlContext(&*inner), stmt.select)?;
+        let ctx = ExecutionContext::new("noname");
+        Ok(df.into_stream(ctx))
     }
 }
 

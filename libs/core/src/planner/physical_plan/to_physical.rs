@@ -53,7 +53,7 @@ fn source_to_physical(ctx: &mut Context, source: LogicalSourcePlan) -> Result<Ph
             .chain(std::iter::once(Field {
                 qualifier: None,
                 name: FIELD_TIME.to_string(),
-                data_type: DataType::Null,
+                data_type: DataType::Timestamp(None),
             }))
             .map(|mut field| {
                 field.qualifier = source.qualifier.clone();
@@ -178,6 +178,7 @@ fn select_expr(
                     name: field_name,
                     data_type: physical_expr.data_type(),
                 });
+                physical_exprs.push(physical_expr);
             }
         }
     }

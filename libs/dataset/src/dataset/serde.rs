@@ -47,12 +47,12 @@ impl<'de> Visitor<'de> for DataSetVisitor {
     {
         let schema = seq
             .next_element::<SchemaRef>()?
-            .ok_or_else(|| Error::custom("invalid dataset"))?;
+            .ok_or_else(|| Error::custom("failed to deserialize schema of dataset"))?;
         let columns = seq
             .next_element_seed::<DeColumns>(DeColumns {
                 schema: schema.clone(),
             })?
-            .ok_or_else(|| Error::custom("invalid dataset"))?;
+            .ok_or_else(|| Error::custom("failed to deserialize columns of dataset"))?;
         DataSet::try_new(schema, columns).map_err(Error::custom)
     }
 }

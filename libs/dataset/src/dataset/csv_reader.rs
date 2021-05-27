@@ -6,7 +6,7 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use csv::{ByteRecord, StringRecord};
 use once_cell::sync::Lazy;
 use regex::{Regex, RegexBuilder};
@@ -22,8 +22,14 @@ use crate::dataset::{DataSet, Field, Schema, SchemaRef};
 
 #[derive(Serialize, Deserialize)]
 pub struct CsvOptions {
+    #[serde(default = "default_delimiter")]
     pub delimiter: u8,
+    #[serde(default)]
     pub has_header: bool,
+}
+
+fn default_delimiter() -> u8 {
+    b','
 }
 
 impl Default for CsvOptions {
@@ -207,7 +213,15 @@ macro_rules! append_value {
         for record in $records {
             match record.get($idx) {
                 Some(value) => {
-                    let value = <$ty as PrimitiveType>::Native::from_str(value)?;
+                    let value =
+                        <$ty as PrimitiveType>::Native::from_str(value).with_context(|| {
+                            format!(
+                                "failed to parse csv record as {} at index {}: {}",
+                                <$ty>::DATA_TYPE,
+                                $idx,
+                                value
+                            )
+                        })?;
                     builder.append(value);
                 }
                 None => builder.append_null(),

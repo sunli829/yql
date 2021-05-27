@@ -17,16 +17,30 @@ impl DataSet {
     pub fn try_new(schema: SchemaRef, columns: Vec<ArrayRef>) -> Result<Self> {
         anyhow::ensure!(
             schema.fields().len() == columns.len() && !columns.is_empty(),
-            "invalid dataset"
+            "invalid dataset: expect {} fields, actual {} fields.",
+            schema.fields().len(),
+            columns.len()
         );
 
         let size = columns[0].len();
-        for column in &columns[1..] {
-            anyhow::ensure!(column.len() == size, "invalid dataset");
+        for (idx, column) in columns[1..].iter().enumerate() {
+            anyhow::ensure!(
+                column.len() == size,
+                "invalid dataset: expect column '{}' length is {}, actual length is {}.",
+                schema.fields()[idx + 1].name,
+                size,
+                column.len()
+            );
         }
 
         for (column, field) in columns.iter().zip(schema.fields()) {
-            anyhow::ensure!(column.data_type() == field.data_type, "invalid dataset");
+            anyhow::ensure!(
+                column.data_type() == field.data_type,
+                "invalid dataset: expect column '{}' datatype is {}, actual datatype is {}.",
+                field.name,
+                field.data_type,
+                column.data_type()
+            );
         }
 
         Ok(Self { schema, columns })
