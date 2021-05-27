@@ -19,7 +19,7 @@ const FUNCS: &[Function] = &[
     AVG, SUM, COUNT, MIN, MAX, FIRST, LAST,
     
     // ref
-    ALL, ANY,
+    ALL, ANY, BARSLAST, BARSSINCE,
 ];
 
 pub fn find_function(namespace: Option<&str>, name: &str) -> Option<&'static Function> {

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::array::{ArrayExt, BooleanArray, BooleanBuilder, DataType, Int64Array};
+use crate::array::{ArrayExt, BooleanArray, BooleanBuilder, DataType, Int64Array, Int64Builder};
 use crate::expr::func::{AggregateFunction, Function, FunctionType};
 use crate::expr::signature::Signature;
 
@@ -13,10 +13,12 @@ trait VecDequeExt<T> {
 
 impl<T> VecDequeExt<T> for VecDeque<T> {
     fn push_back_limit(&mut self, x: T, limit: usize) -> Option<T> {
-        self.push_back(x);
         if self.len() == limit {
-            self.pop_front()
+            let res = self.pop_front();
+            self.push_back(x);
+            res
         } else {
+            self.push_back(x);
             None
         }
     }
@@ -32,8 +34,8 @@ struct AllState {
 pub const ALL: Function = Function {
     namespace: Some("f"),
     name: "all",
-    signature: &Signature::Uniform(1, &[DataType::Boolean, DataType::Int64]),
-    return_type: |_| DataType::Float64,
+    signature: &Signature::Exact(&[DataType::Boolean, DataType::Int64]),
+    return_type: |_| DataType::Boolean,
     function_type: FunctionType::Stateful(|| {
         Box::new(AggregateFunction::<AllState>::new(|state, args| {
             let array = args[0].downcast_ref::<BooleanArray>();
@@ -89,8 +91,8 @@ struct AnyState {
 pub const ANY: Function = Function {
     namespace: Some("f"),
     name: "any",
-    signature: &Signature::Uniform(1, &[DataType::Boolean, DataType::Int64]),
-    return_type: |_| DataType::Float64,
+    signature: &Signature::Exact(&[DataType::Boolean, DataType::Int64]),
+    return_type: |_| DataType::Boolean,
     function_type: FunctionType::Stateful(|| {
         Box::new(AggregateFunction::<AnyState>::new(|state, args| {
             let array = args[0].downcast_ref::<BooleanArray>();
@@ -129,6 +131,72 @@ pub const ANY: Function = Function {
                     state.succeeded = new_succeeded;
                     builder.append(result);
                 }
+            }
+
+            Ok(Arc::new(builder.finish()))
+        }))
+    }),
+};
+
+#[derive(Default, Clone, Serialize, Deserialize)]
+struct BarsLastState {
+    index: usize,
+    prev: Option<usize>,
+}
+
+pub const BARSLAST: Function = Function {
+    namespace: Some("f"),
+    name: "barslast",
+    signature: &Signature::Exact(&[DataType::Boolean]),
+    return_type: |_| DataType::Int64,
+    function_type: FunctionType::Stateful(|| {
+        Box::new(AggregateFunction::<BarsLastState>::new(|state, args| {
+            let array = args[0].downcast_ref::<BooleanArray>();
+            let mut builder = Int64Builder::default();
+
+            for x in array.iter() {
+                match (x, state.prev) {
+                    (true, _) => {
+                        state.prev = Some(state.index);
+                        builder.append(0);
+                    }
+                    (false, Some(prev)) => builder.append((state.index - prev) as i64),
+                    (false, None) => builder.append_null(),
+                }
+                state.index += 1;
+            }
+
+            Ok(Arc::new(builder.finish()))
+        }))
+    }),
+};
+
+#[derive(Default, Clone, Serialize, Deserialize)]
+struct BarsSinceState {
+    index: usize,
+    prev: Option<usize>,
+}
+
+pub const BARSSINCE: Function = Function {
+    namespace: Some("f"),
+    name: "barssince",
+    signature: &Signature::Exact(&[DataType::Boolean]),
+    return_type: |_| DataType::Int64,
+    function_type: FunctionType::Stateful(|| {
+        Box::new(AggregateFunction::<BarsLastState>::new(|state, args| {
+            let array = args[0].downcast_ref::<BooleanArray>();
+            let mut builder = Int64Builder::default();
+
+            for x in array.iter() {
+                match (x, state.prev) {
+                    (_, Some(prev)) => builder.append((state.index - prev) as i64),
+                    (true, None) => {
+                        state.prev = Some(state.index);
+                        builder.append(0);
+                    }
+                    (false, None) => builder.append_null(),
+                }
+                state.index += 1;
             }
 
             Ok(Arc::new(builder.finish()))
