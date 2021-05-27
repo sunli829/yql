@@ -285,7 +285,7 @@ impl<T: PrimitiveType> PrimitiveArray<T> {
     /// # Examples
     ///
     /// ```rust
-    /// use yql_array::Int32Array;
+    /// use yql_dataset::array::Int32Array;
     ///
     /// let array = Int32Array::new_scalar(100, Some(1));
     /// assert_eq!(array.to_scalar(), Some(Some(1)));
