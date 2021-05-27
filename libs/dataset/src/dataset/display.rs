@@ -93,24 +93,18 @@ impl<'a> Display for DataSetDisplay<'a> {
                         DataType::String => {
                             add_table_cell!(table_row, self.dataset, row, column, StringArray)
                         }
-                        DataType::Timestamp(Some(tz)) => table_row.add_cell(Cell::new(
-                            tz.timestamp_millis(
-                                self.dataset.columns()[column]
-                                    .as_any()
-                                    .downcast_ref::<TimestampArray>()
-                                    .unwrap()
-                                    .value(row),
-                            ),
-                        )),
-                        DataType::Timestamp(None) => table_row.add_cell(Cell::new(
-                            chrono::Local.timestamp_millis(
-                                self.dataset.columns()[column]
-                                    .as_any()
-                                    .downcast_ref::<TimestampArray>()
-                                    .unwrap()
-                                    .value(row),
-                            ),
-                        )),
+                        DataType::Timestamp(tz) => {
+                            let tz = tz.unwrap_or(chrono_tz::UTC);
+                            table_row.add_cell(Cell::new(
+                                tz.timestamp_millis(
+                                    self.dataset.columns()[column]
+                                        .as_any()
+                                        .downcast_ref::<TimestampArray>()
+                                        .unwrap()
+                                        .value(row),
+                                ),
+                            ))
+                        }
                     };
                 }
 
