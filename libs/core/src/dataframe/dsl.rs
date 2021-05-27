@@ -30,6 +30,19 @@ pub fn wildcard_with_table(table: impl Into<String>) -> Expr {
 
 pub fn call(name: impl Into<String>, args: Vec<Expr>) -> Expr {
     Expr::Call {
+        namespace: None,
+        name: name.into(),
+        args,
+    }
+}
+
+pub fn call_with_namespace(
+    namespace: impl Into<String>,
+    name: impl Into<String>,
+    args: Vec<Expr>,
+) -> Expr {
+    Expr::Call {
+        namespace: Some(namespace.into()),
         name: name.into(),
         args,
     }

@@ -11,7 +11,7 @@ use f_ref::*;
 use crate::expr::func::Function;
 
 #[rustfmt::skip]
-pub const FUNCS: &[Function] = &[
+const FUNCS: &[Function] = &[
     // math
     SQRT, SIN, COS, TAN, ASIN, ACOS, ATAN, FLOOR, CEIL, ROUND, TRUNC, ABS, SIGNUM, EXP, LN, LOG2, LOG10,
     
@@ -21,3 +21,16 @@ pub const FUNCS: &[Function] = &[
     // ref
     ALL, ANY,
 ];
+
+pub fn find_function(namespace: Option<&str>, name: &str) -> Option<&'static Function> {
+    FUNCS.iter().find(|func| match namespace {
+        Some(namespace) => match func.namespace {
+            Some(func_namespace) => {
+                func_namespace.eq_ignore_ascii_case(namespace)
+                    && func.name.eq_ignore_ascii_case(&name)
+            }
+            None => false,
+        },
+        None => func.namespace.is_none() && func.name.eq_ignore_ascii_case(&name),
+    })
+}

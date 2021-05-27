@@ -3,7 +3,7 @@ use anyhow::Error;
 use crate::array::DataType;
 use crate::dataset::SchemaRef;
 use crate::expr::func::{FunctionType, StatefulFunction};
-use crate::expr::funcs::FUNCS;
+use crate::expr::funcs::find_function;
 use crate::expr::physical_expr::{PhysicalExpr, PhysicalFunction, PhysicalNode};
 use crate::expr::Expr;
 
@@ -56,10 +56,7 @@ fn to_physical(ctx: &mut Context, expr: Expr) -> Result<PhysicalNode> {
             name,
             args: arguments,
         } => {
-            let func = match FUNCS
-                .iter()
-                .find(|func| func.name.eq_ignore_ascii_case(&name))
-            {
+            let func = match find_function(namespace.as_deref(), &name) {
                 Some(func) => func,
                 None => anyhow::bail!("no such function: '{}'", name),
             };

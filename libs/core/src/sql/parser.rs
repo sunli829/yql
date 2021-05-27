@@ -165,12 +165,19 @@ pub fn expr(input: &str) -> IResult<&str, Expr> {
 }
 
 fn expr_call(input: &str) -> IResult<&str, Expr> {
+    let func_name = alt((
+        map(tuple((ident, char('.'), ident)), |(namespace, _, name)| {
+            (Some(namespace), name)
+        }),
+        map(ident, |name| (None, name)),
+    ));
     let arguments = separated_list0(char(','), delimited(sp, expr, sp));
     context(
         "expr_call",
         map(
-            tuple((ident, sp, char('('), sp, arguments, sp, char(')'))),
-            |(name, _, _, _, args, _, _)| Expr::Call {
+            tuple((func_name, sp, char('('), sp, arguments, sp, char(')'))),
+            |((namespace, name), _, _, _, args, _, _)| Expr::Call {
+                namespace: namespace.map(ToString::to_string),
                 name: name.to_string(),
                 args,
             },
@@ -565,6 +572,7 @@ mod tests {
             Ok((
                 "",
                 Expr::Call {
+                    namespace: None,
                     name: "sum".to_string(),
                     args: vec![Expr::Column {
                         qualifier: None,
@@ -579,6 +587,7 @@ mod tests {
             Ok((
                 "",
                 Expr::Call {
+                    namespace: None,
                     name: "c".to_string(),
                     args: vec![
                         Expr::Column {
@@ -592,6 +601,21 @@ mod tests {
                         },
                         Expr::Literal(Literal::Int(2)),
                     ]
+                }
+            ))
+        );
+
+        assert_eq!(
+            expr_call(r#"abc.sum(a)"#),
+            Ok((
+                "",
+                Expr::Call {
+                    namespace: Some("abc".to_string()),
+                    name: "sum".to_string(),
+                    args: vec![Expr::Column {
+                        qualifier: None,
+                        name: "a".to_string()
+                    }]
                 }
             ))
         );
@@ -699,6 +723,7 @@ mod tests {
                             name: "b".to_string()
                         },
                         Expr::Call {
+                            namespace: None,
                             name: "sum".to_string(),
                             args: vec![Expr::Column {
                                 qualifier: None,
