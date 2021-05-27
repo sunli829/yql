@@ -19,7 +19,7 @@ use crate::expr::ExprState;
 use crate::planner::physical_plan::PhysicalSourceNode;
 use crate::source_provider::SourceDataSet;
 
-enum Control {
+enum Message {
     CheckPointBarrier(Result<Arc<CheckPointBarrier>, BroadcastStreamRecvError>),
     DataSet(Result<SourceDataSet>),
 }
@@ -38,17 +38,17 @@ struct CombinedStream {
 }
 
 impl Stream for CombinedStream {
-    type Item = Control;
+    type Item = Message;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match Pin::new(&mut self.rx_barrier).poll_next(cx) {
-            Poll::Ready(Some(item)) => return Poll::Ready(Some(Control::CheckPointBarrier(item))),
+            Poll::Ready(Some(item)) => return Poll::Ready(Some(Message::CheckPointBarrier(item))),
             Poll::Ready(None) => return Poll::Ready(None),
             Poll::Pending => {}
         }
 
         match Pin::new(&mut self.input).poll_next(cx) {
-            Poll::Ready(Some(item)) => Poll::Ready(Some(Control::DataSet(item))),
+            Poll::Ready(Some(item)) => Poll::Ready(Some(Message::DataSet(item))),
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
         }
@@ -90,9 +90,9 @@ pub fn create_source_stream(
 
     Ok(Box::pin(async_stream::try_stream! {
         let mut current_state = None;
-        while let Some(control) = input.next().await {
-            match control {
-                Control::CheckPointBarrier(res) => {
+        while let Some(message) = input.next().await {
+            match message {
+                Message::CheckPointBarrier(res) => {
                     if let (Ok(barrier), Some(current_state)) = (res, current_state.clone()) {
                         let _ = barrier.source_barrier().wait().await;
                         let time_expr_state = match &time_expr {
@@ -113,7 +113,7 @@ pub fn create_source_stream(
                         yield Event::CreateCheckPoint(barrier);
                     }
                 }
-                Control::DataSet(item) => {
+                Message::DataSet(item) => {
                     let SourceDataSet { state, dataset } = item?;
                     current_state = Some(state);
                     let new_dataset = process_dataset(

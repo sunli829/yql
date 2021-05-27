@@ -141,9 +141,13 @@ pub fn group_by_window<'a>(
 ) -> Result<GroupByWindowIter<'a>> {
     let mut windows: AHashMap<_, (i64, Vec<usize>)> = AHashMap::new();
     let times = dataset.column(time_idx).unwrap();
+    let tz = match dataset.schema().fields()[time_idx].data_type {
+        DataType::Timestamp(tz) => tz.unwrap_or(chrono_tz::UTC),
+        _ => unreachable!(),
+    };
     let times = times.downcast_ref::<TimestampArray>();
     for (idx, timestamp) in times.iter().enumerate() {
-        for (start, end) in window.windows(timestamp) {
+        for (start, end) in window.windows(timestamp, tz) {
             let window = windows.entry(start).or_default();
             window.0 = end;
             window.1.push(idx);

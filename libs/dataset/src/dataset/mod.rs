@@ -7,4 +7,5 @@ mod serde;
 
 pub use csv_reader::{CsvOptions, CsvReader};
 pub use dataset::DataSet;
+pub use display::DataSetDisplay;
 pub use schema::{Field, Schema, SchemaRef};

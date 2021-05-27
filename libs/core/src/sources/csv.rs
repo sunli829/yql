@@ -6,7 +6,7 @@ use futures_util::stream::BoxStream;
 use crate::dataset::{CsvOptions, SchemaRef};
 use crate::{GenericSourceDataSet, GenericSourceProvider};
 
-const DEFAULT_BATCH_SIZE: usize = 1000;
+const DEFAULT_BATCH_SIZE: usize = 10000;
 
 pub struct Csv {
     options: CsvOptions,

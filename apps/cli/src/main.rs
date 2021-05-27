@@ -5,6 +5,7 @@ use bytes::Bytes;
 use futures_util::stream::BoxStream;
 use futures_util::{Stream, StreamExt};
 use std::path::PathBuf;
+use std::time::Instant;
 use structopt::StructOpt;
 use yql_dataset::dataset::DataSet;
 
@@ -81,10 +82,15 @@ async fn main() -> Result<()> {
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
-                rl.history_mut().add(&line);
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                rl.history_mut().add(line);
+                let start_time = Instant::now();
                 let res = cli
                     .post(&format!("{}/sql", options.url))
-                    .body(line)
+                    .body(line.to_string())
                     .send()
                     .await;
                 let resp = match res {
@@ -117,9 +123,18 @@ async fn main() -> Result<()> {
                 let stream =
                     create_dataset_stream(resp.bytes_stream()).take_until(tokio::signal::ctrl_c());
                 tokio::pin!(stream);
+
+                let mut first = true;
                 while let Some(res) = stream.next().await {
                     match res {
-                        Ok(dataset) => println!("{}", dataset),
+                        Ok(dataset) => {
+                            if first {
+                                print!("{}", dataset.display());
+                                first = false;
+                            } else {
+                                print!("{}", dataset.display_no_header());
+                            }
+                        }
                         Err(err) => {
                             println!("Error: {}", err);
                             break;
@@ -128,6 +143,10 @@ async fn main() -> Result<()> {
                     println!();
                 }
                 println!();
+                println!(
+                    "Done in {:.3} seconds.",
+                    (Instant::now() - start_time).as_secs_f32()
+                );
             }
             Err(_) => break,
         }

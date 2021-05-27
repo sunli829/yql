@@ -52,11 +52,11 @@ impl Period {
 pub enum Window {
     Fixed { length: i64 },
     Sliding { length: i64, interval: i64 },
-    Period { period: Period, timezone: Tz },
+    Period { period: Period },
 }
 
 impl Window {
-    pub fn windows(self, timestamp: i64) -> Vec<(i64, i64)> {
+    pub fn windows(self, timestamp: i64, tz: Tz) -> Vec<(i64, i64)> {
         match self {
             Window::Fixed { length } => {
                 let start = timestamp / length * length;
@@ -72,8 +72,8 @@ impl Window {
                 }
                 windows
             }
-            Window::Period { period, timezone } => {
-                let datetime = timezone.timestamp_millis(timestamp);
+            Window::Period { period } => {
+                let datetime = tz.timestamp_millis(timestamp);
                 let (start, end) = period.window(datetime);
                 vec![(start.timestamp_millis(), end.timestamp_millis())]
             }

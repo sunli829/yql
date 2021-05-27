@@ -8,7 +8,7 @@ struct ConsoleSink;
 #[async_trait::async_trait]
 impl Sink for ConsoleSink {
     async fn send(&mut self, dataset: DataSet) -> Result<()> {
-        println!("{}", dataset);
+        println!("{}", dataset.display());
         Ok(())
     }
 }

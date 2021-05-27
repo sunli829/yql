@@ -183,6 +183,8 @@ impl AggregateManager {
                     if let Some(window) = self.windows.remove(&start) {
                         completed_windows.push(window);
                     }
+                } else {
+                    break;
                 }
             }
         }

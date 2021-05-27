@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use anyhow::{Context as _, Result};
 use futures_util::stream::{BoxStream, StreamExt};
+use futures_util::Stream;
 use tokio::sync::broadcast;
-use tokio_stream::wrappers::IntervalStream;
+use tokio::time::Interval;
 
 use crate::dataset::DataSet;
 use crate::execution::checkpoint::CheckPointBarrier;
@@ -46,9 +49,31 @@ pub struct CreateStreamContext {
     pub prev_state: HashMap<usize, Vec<u8>>,
 }
 
-enum Control {
+enum Message {
     CreateCheckPoint,
     Event(Result<Event>),
+}
+
+struct CombinedStream {
+    interval: Pin<Box<Interval>>,
+    input: EventStream,
+}
+
+impl Stream for CombinedStream {
+    type Item = Message;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match self.interval.poll_tick(cx) {
+            Poll::Ready(_) => return Poll::Ready(Some(Message::CreateCheckPoint)),
+            Poll::Pending => {}
+        }
+
+        match self.input.poll_next_unpin(cx) {
+            Poll::Ready(Some(event)) => Poll::Ready(Some(Message::Event(event))),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
+    }
 }
 
 pub fn create_data_stream(
@@ -78,7 +103,7 @@ pub fn create_data_stream(
             prev_state,
         };
         let event_stream = crate::execution::streams::create_stream(&mut create_ctx, plan.root)?;
-        let checkpoint_interval = IntervalStream::new(tokio::time::interval(ctx.checkpoint_interval));
+        let checkpoint_interval = tokio::time::interval(ctx.checkpoint_interval);
 
         if let Some(signal) = signal {
             tokio::spawn({
@@ -91,14 +116,14 @@ pub fn create_data_stream(
             });
         }
 
-        let mut input = futures_util::stream::select(
-            event_stream.map(Control::Event),
-            checkpoint_interval.map(|_| Control::CreateCheckPoint),
-        );
+        let mut input = CombinedStream {
+            interval: Box::pin(checkpoint_interval),
+            input: event_stream,
+        };
 
-        while let Some(control) = input.next().await {
-            match control {
-                Control::CreateCheckPoint => {
+        while let Some(message) = input.next().await {
+            match message {
+                Message::CreateCheckPoint => {
                     let barrier = Arc::new(CheckPointBarrier::new(
                         node_count,
                         source_count,
@@ -108,10 +133,12 @@ pub fn create_data_stream(
                     let ctx = ctx.clone();
                     tokio::spawn(save_state(ctx, barrier));
                 }
-                Control::Event(res) => {
+                Message::Event(res) => {
                     let event = res?;
                     if let Event::DataSet { dataset, .. } = event {
-                        yield dataset;
+                        if !dataset.is_empty() {
+                            yield dataset;
+                        }
                     }
                 }
             }

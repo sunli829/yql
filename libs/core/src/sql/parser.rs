@@ -10,6 +10,7 @@ use nom::sequence::{delimited, pair, preceded, separated_pair, tuple};
 use nom::IResult;
 
 use crate::expr::{BinaryOperator, Expr, Literal, UnaryOperator};
+use crate::planner::window::Period;
 use crate::sql::ast::{GroupBy, Select, Source, SourceFrom};
 use crate::Window;
 
@@ -148,6 +149,13 @@ pub fn column(input: &str) -> IResult<&str, Expr> {
                 qualifier: None,
                 name,
             }),
+            map(
+                separated_pair(name, char('.'), char('*')),
+                |(qualifier, _)| Expr::Wildcard {
+                    qualifier: Some(qualifier),
+                },
+            ),
+            map(char('*'), |_| Expr::Wildcard { qualifier: None }),
         )),
     )(input)
 }
@@ -331,8 +339,6 @@ fn duration(input: &str) -> IResult<&str, i64> {
 fn window(input: &str) -> IResult<&str, Window> {
     let fixed_window = map(
         tuple((
-            tag_no_case("window"),
-            sp,
             tag_no_case("fixed"),
             sp,
             char('('),
@@ -341,12 +347,10 @@ fn window(input: &str) -> IResult<&str, Window> {
             sp,
             char(')'),
         )),
-        |(_, _, _, _, _, _, length, _, _)| Window::Fixed { length },
+        |(_, _, _, _, length, _, _)| Window::Fixed { length },
     );
     let sliding_window = map(
         tuple((
-            tag_no_case("window"),
-            sp,
             tag_no_case("sliding"),
             sp,
             char('('),
@@ -359,10 +363,29 @@ fn window(input: &str) -> IResult<&str, Window> {
             sp,
             char(')'),
         )),
-        |(_, _, _, _, _, _, length, _, _, _, interval, _, _)| Window::Sliding { length, interval },
+        |(_, _, _, _, length, _, _, _, interval, _, _)| Window::Sliding { length, interval },
+    );
+    let period_window = map(
+        alt((
+            value(Period::Day, tag_no_case("day")),
+            value(Period::Week, tag_no_case("week")),
+            value(Period::Month, tag_no_case("month")),
+            value(Period::Year, tag_no_case("year")),
+        )),
+        |period| Window::Period { period },
     );
 
-    context("window", alt((fixed_window, sliding_window)))(input)
+    context(
+        "window",
+        map(
+            tuple((
+                tag_no_case("window"),
+                sp,
+                alt((fixed_window, sliding_window, period_window)),
+            )),
+            |(_, _, window)| window,
+        ),
+    )(input)
 }
 
 pub fn select(input: &str) -> IResult<&str, Select> {
@@ -607,6 +630,46 @@ mod tests {
                 Window::Sliding {
                     length: 1000 * 5 * 60,
                     interval: 1000 * 60,
+                },
+            ))
+        );
+
+        assert_eq!(
+            window(r#"window day"#),
+            Ok((
+                "",
+                Window::Period {
+                    period: Period::Day
+                },
+            ))
+        );
+
+        assert_eq!(
+            window(r#"window week"#),
+            Ok((
+                "",
+                Window::Period {
+                    period: Period::Week
+                },
+            ))
+        );
+
+        assert_eq!(
+            window(r#"window month"#),
+            Ok((
+                "",
+                Window::Period {
+                    period: Period::Month
+                },
+            ))
+        );
+
+        assert_eq!(
+            window(r#"window year"#),
+            Ok((
+                "",
+                Window::Period {
+                    period: Period::Year
                 },
             ))
         );
