@@ -3,14 +3,14 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use futures_util::future::FutureExt;
-use futures_util::stream::BoxStream;
+use futures_util::stream::{BoxStream, StreamExt};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 use tokio::sync::{oneshot, Mutex};
 use yql_core::array::{ArrayRef, BooleanBuilder, DataType, StringArray, StringBuilder};
 use yql_core::dataset::{DataSet, Field, Schema, SchemaRef};
 use yql_core::sql::SqlSourceProvider;
-use yql_core::{DataFrame, ExecutionContext, SinkProvider};
+use yql_core::{DataFrame, ExecutionContext, ExecutionMetrics, SinkProvider};
 
 use crate::registry::Registry;
 use crate::sink_provider::create_sink_provider;
@@ -114,6 +114,16 @@ impl yql_core::Storage for StreamStorage {
     }
 }
 
+pub enum ExecuteStreamItem {
+    DataSet(DataSet),
+    Metrics(ExecutionMetrics),
+}
+
+pub enum ExecuteResult {
+    DataSet(DataSet),
+    ExecStream(BoxStream<'static, Result<ExecuteStreamItem>>),
+}
+
 pub struct ServiceInner {
     storage: Storage,
     registry: Registry,
@@ -151,20 +161,36 @@ impl Service {
         })
     }
 
-    pub async fn execute(&self, sql: &str) -> Result<BoxStream<'static, Result<DataSet>>> {
+    pub async fn execute(&self, sql: &str) -> Result<ExecuteResult> {
         let (_, stmt) = crate::sql::stmt(sql).map_err(|err| anyhow::anyhow!("{}", err))?;
 
         match stmt {
-            Stmt::CreateSource(stmt) => Ok(once_stream(self.execute_create_source(stmt).await?)),
-            Stmt::CreateStream(stmt) => Ok(once_stream(self.execute_create_stream(stmt).await?)),
-            Stmt::CreateSink(stmt) => Ok(once_stream(self.execute_create_sink(stmt).await?)),
-            Stmt::DeleteSource(stmt) => Ok(once_stream(self.execute_delete_source(stmt).await?)),
-            Stmt::DeleteStream(stmt) => Ok(once_stream(self.execute_delete_stream(stmt).await?)),
-            Stmt::DeleteSink(stmt) => Ok(once_stream(self.execute_delete_sink(stmt).await?)),
-            Stmt::StartStream(stmt) => Ok(once_stream(self.execute_start_stream(stmt).await?)),
-            Stmt::StopStream(stmt) => Ok(once_stream(self.execute_stop_stream(stmt).await?)),
-            Stmt::Show(stmt) => Ok(once_stream(self.execute_show(stmt).await?)),
-            Stmt::Select(stmt) => self.execute_select(stmt).await,
+            Stmt::CreateSource(stmt) => Ok(ExecuteResult::DataSet(
+                self.execute_create_source(stmt).await?,
+            )),
+            Stmt::CreateStream(stmt) => Ok(ExecuteResult::DataSet(
+                self.execute_create_stream(stmt).await?,
+            )),
+            Stmt::CreateSink(stmt) => Ok(ExecuteResult::DataSet(
+                self.execute_create_sink(stmt).await?,
+            )),
+            Stmt::DeleteSource(stmt) => Ok(ExecuteResult::DataSet(
+                self.execute_delete_source(stmt).await?,
+            )),
+            Stmt::DeleteStream(stmt) => Ok(ExecuteResult::DataSet(
+                self.execute_delete_stream(stmt).await?,
+            )),
+            Stmt::DeleteSink(stmt) => Ok(ExecuteResult::DataSet(
+                self.execute_delete_sink(stmt).await?,
+            )),
+            Stmt::StartStream(stmt) => Ok(ExecuteResult::DataSet(
+                self.execute_start_stream(stmt).await?,
+            )),
+            Stmt::StopStream(stmt) => Ok(ExecuteResult::DataSet(
+                self.execute_stop_stream(stmt).await?,
+            )),
+            Stmt::Show(stmt) => Ok(ExecuteResult::DataSet(self.execute_show(stmt).await?)),
+            Stmt::Select(stmt) => Ok(ExecuteResult::ExecStream(self.execute_select(stmt).await?)),
         }
     }
 
@@ -284,10 +310,12 @@ impl Service {
         };
         let sink = inner.create_sink_provider(&stream_definition.to)?;
         let df = DataFrame::from_sql_select(&SqlContext(&*inner), stream_definition.select)?;
-        let ctx = ExecutionContext::new(stmt.name.clone()).with_storage(StreamStorage {
-            name: stmt.name.clone(),
-            inner: service_inner.clone(),
-        });
+        let ctx = Arc::new(
+            ExecutionContext::new(stmt.name.clone()).with_storage(StreamStorage {
+                name: stmt.name.clone(),
+                inner: service_inner.clone(),
+            }),
+        );
         let (tx_shutdown, rx_shutdown) = oneshot::channel::<()>();
 
         if stmt.restart {
@@ -434,14 +462,17 @@ impl Service {
     async fn execute_select(
         &self,
         stmt: StmtSelect,
-    ) -> Result<BoxStream<'static, Result<DataSet>>> {
+    ) -> Result<BoxStream<'static, Result<ExecuteStreamItem>>> {
         let inner = self.inner.lock().await;
         let df = DataFrame::from_sql_select(&SqlContext(&*inner), stmt.select)?;
-        let ctx = ExecutionContext::new("noname");
-        Ok(df.into_stream(ctx))
-    }
-}
+        let ctx = Arc::new(ExecutionContext::new("noname"));
+        let mut input = df.into_stream(ctx.clone());
 
-fn once_stream(dataset: DataSet) -> BoxStream<'static, Result<DataSet>> {
-    Box::pin(futures_util::stream::once(async move { Ok(dataset) }))
+        Ok(Box::pin(async_stream::try_stream! {
+            while let Some(dataset) = input.next().await.transpose()? {
+                yield ExecuteStreamItem::DataSet(dataset);
+            }
+            yield ExecuteStreamItem::Metrics(ctx.metrics());
+        }))
+    }
 }

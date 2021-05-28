@@ -1,6 +1,7 @@
 pub mod dsl;
 
 use std::future::Future;
+use std::sync::Arc;
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
@@ -65,7 +66,7 @@ impl DataFrame {
         }))
     }
 
-    pub fn into_stream(self, ctx: ExecutionContext) -> BoxStream<'static, Result<DataSet>> {
+    pub fn into_stream(self, ctx: Arc<ExecutionContext>) -> BoxStream<'static, Result<DataSet>> {
         self.into_stream_with_graceful_shutdown(
             ctx,
             Option::<futures_util::future::Pending<()>>::None,
@@ -74,7 +75,7 @@ impl DataFrame {
 
     pub fn into_stream_with_graceful_shutdown(
         self,
-        ctx: ExecutionContext,
+        ctx: Arc<ExecutionContext>,
         signal: Option<impl Future<Output = ()> + Send + 'static>,
     ) -> BoxStream<'static, Result<DataSet>> {
         create_data_stream(ctx, self.0, signal)
@@ -82,7 +83,7 @@ impl DataFrame {
 
     pub fn into_task(
         self,
-        ctx: ExecutionContext,
+        ctx: Arc<ExecutionContext>,
         sink_provider: impl SinkProvider,
     ) -> BoxFuture<'static, Result<()>> {
         self.into_task_with_graceful_shutdown(
@@ -94,7 +95,7 @@ impl DataFrame {
 
     pub fn into_task_with_graceful_shutdown(
         self,
-        ctx: ExecutionContext,
+        ctx: Arc<ExecutionContext>,
         sink_provider: impl SinkProvider,
         signal: Option<impl Future<Output = ()> + Send + 'static>,
     ) -> BoxFuture<'static, Result<()>> {

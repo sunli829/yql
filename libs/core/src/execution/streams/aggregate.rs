@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use ahash::AHashMap;
 use anyhow::Result;
+use futures_util::StreamExt;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use tokio_stream::StreamExt;
 
 use crate::array::{
     ArrayExt, ArrayRef, BooleanType, DataType, Float32Type, Float64Type, Int16Type, Int32Type,
@@ -190,85 +190,76 @@ impl AggregateManager {
         }
 
         for window in completed_windows {
-            let mut columns = Vec::with_capacity(self.aggr_exprs.len());
-
-            for index in 0..self.aggr_exprs.len() {
-                let field = &self.schema.fields()[index];
-
-                match field.data_type {
-                    DataType::Null => {
-                        columns.push(Arc::new(NullArray::new(window.children.len())) as ArrayRef)
-                    }
-                    DataType::Int8 => {
-                        append_primitive_value!(columns, window.children, index, Int8Type, Int8)
-                    }
-                    DataType::Int16 => {
-                        append_primitive_value!(columns, window.children, index, Int16Type, Int16)
-                    }
-                    DataType::Int32 => {
-                        append_primitive_value!(columns, window.children, index, Int32Type, Int32)
-                    }
-                    DataType::Int64 => {
-                        append_primitive_value!(columns, window.children, index, Int64Type, Int64)
-                    }
-                    DataType::Float32 => {
-                        append_primitive_value!(
-                            columns,
-                            window.children,
-                            index,
-                            Float32Type,
-                            Float32
-                        )
-                    }
-                    DataType::Float64 => {
-                        append_primitive_value!(
-                            columns,
-                            window.children,
-                            index,
-                            Float64Type,
-                            Float64
-                        )
-                    }
-                    DataType::Boolean => {
-                        append_primitive_value!(
-                            columns,
-                            window.children,
-                            index,
-                            BooleanType,
-                            Boolean
-                        )
-                    }
-                    DataType::Timestamp(_) => append_primitive_value!(
-                        columns,
-                        window.children,
-                        index,
-                        TimestampType,
-                        Timestamp
-                    ),
-                    DataType::String => {
-                        let mut builder = StringBuilder::with_capacity(window.children.len());
-                        for state in window.children.values() {
-                            builder.append_opt(
-                                if let Scalar::String(value) = &state.values[index] {
-                                    Some(value)
-                                } else {
-                                    None
-                                },
-                            );
-                        }
-                        columns.push(Arc::new(builder.finish()));
-                    }
-                }
-            }
-
-            columns.push(Arc::new(TimestampArray::new_scalar(
-                window.children.len(),
-                Some(window.start_time),
-            )));
-            datasets.push(DataSet::try_new(self.schema.clone(), columns)?);
+            datasets.push(self.take_window_results(window)?);
         }
 
         Ok(datasets)
+    }
+
+    fn finish(&mut self) -> Result<Vec<DataSet>> {
+        std::mem::take(&mut self.windows)
+            .into_iter()
+            .map(|(_, window)| self.take_window_results(window))
+            .try_collect()
+    }
+
+    fn take_window_results(&self, window: WindowState) -> Result<DataSet> {
+        let mut columns = Vec::with_capacity(self.aggr_exprs.len());
+
+        for index in 0..self.aggr_exprs.len() {
+            let field = &self.schema.fields()[index];
+
+            match field.data_type {
+                DataType::Null => {
+                    columns.push(Arc::new(NullArray::new(window.children.len())) as ArrayRef)
+                }
+                DataType::Int8 => {
+                    append_primitive_value!(columns, window.children, index, Int8Type, Int8)
+                }
+                DataType::Int16 => {
+                    append_primitive_value!(columns, window.children, index, Int16Type, Int16)
+                }
+                DataType::Int32 => {
+                    append_primitive_value!(columns, window.children, index, Int32Type, Int32)
+                }
+                DataType::Int64 => {
+                    append_primitive_value!(columns, window.children, index, Int64Type, Int64)
+                }
+                DataType::Float32 => {
+                    append_primitive_value!(columns, window.children, index, Float32Type, Float32)
+                }
+                DataType::Float64 => {
+                    append_primitive_value!(columns, window.children, index, Float64Type, Float64)
+                }
+                DataType::Boolean => {
+                    append_primitive_value!(columns, window.children, index, BooleanType, Boolean)
+                }
+                DataType::Timestamp(_) => append_primitive_value!(
+                    columns,
+                    window.children,
+                    index,
+                    TimestampType,
+                    Timestamp
+                ),
+                DataType::String => {
+                    let mut builder = StringBuilder::with_capacity(window.children.len());
+                    for state in window.children.values() {
+                        builder.append_opt(if let Scalar::String(value) = &state.values[index] {
+                            Some(value)
+                        } else {
+                            None
+                        });
+                    }
+                    columns.push(Arc::new(builder.finish()));
+                }
+            }
+        }
+
+        columns.push(Arc::new(TimestampArray::new_scalar(
+            window.children.len(),
+            Some(window.start_time),
+        )));
+        DataSet::try_new(self.schema.clone(), columns)
     }
 }
 
@@ -297,12 +288,14 @@ pub fn create_aggregate_stream(
         manager.load_state(prev_state)?;
     }
 
-    let mut input = create_stream(ctx, *input)?;
+    let mut input = create_stream(ctx, *input)?.fuse();
+    let mut last_watermark = None;
 
     Ok(Box::pin(async_stream::try_stream! {
         while let Some(event) = input.next().await.transpose()? {
             match event {
                 Event::DataSet{ current_watermark, dataset } => {
+                    last_watermark = Some(current_watermark);
                     for dataset in manager.aggregate(&dataset, current_watermark)? {
                         yield Event::DataSet{ current_watermark, dataset };
                     }
@@ -316,6 +309,13 @@ pub fn create_aggregate_stream(
                         break;
                     }
                 }
+            }
+        }
+
+        if let Some(last_watermark) = last_watermark {
+            let datasets = manager.finish()?;
+            for dataset in datasets {
+                yield Event::DataSet{ current_watermark: last_watermark, dataset };
             }
         }
     }))

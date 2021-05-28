@@ -5,5 +5,5 @@ mod source_provider;
 mod sql;
 mod storage;
 
-pub use service::Service;
+pub use service::{ExecuteResult, ExecuteStreamItem, Service};
 pub use storage::{Definition, SinkDefinition, SourceDefinition, StreamDefinition};

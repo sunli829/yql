@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::{Context as _, Result};
-use futures_util::stream::{BoxStream, StreamExt};
-use futures_util::Stream;
+use chrono::Utc;
+use futures_util::stream::{BoxStream, Stream, StreamExt};
 use tokio::sync::broadcast;
 use tokio::time::Interval;
 
@@ -77,7 +77,7 @@ impl Stream for CombinedStream {
 }
 
 pub fn create_data_stream(
-    ctx: ExecutionContext,
+    ctx: Arc<ExecutionContext>,
     plan: LogicalPlan,
     signal: Option<impl Future<Output = ()> + Send + 'static>,
 ) -> BoxStream<'static, Result<DataSet>> {
@@ -92,7 +92,6 @@ pub fn create_data_stream(
             None => Default::default(),
         };
 
-        let ctx = Arc::new(ctx);
         let plan = PhysicalPlan::try_new(plan)?;
         let node_count = plan.node_count;
         let source_count = plan.source_count;
@@ -121,6 +120,8 @@ pub fn create_data_stream(
             input: event_stream,
         };
 
+        ctx.update_metrics(|metrics| metrics.start_time = Some(Utc::now().timestamp_millis()));
+
         while let Some(message) = input.next().await {
             match message {
                 Message::CreateCheckPoint => {
@@ -137,12 +138,15 @@ pub fn create_data_stream(
                     let event = res?;
                     if let Event::DataSet { dataset, .. } = event {
                         if !dataset.is_empty() {
+                            ctx.update_metrics(|metrics| metrics.num_output_rows += dataset.len());
                             yield dataset;
                         }
                     }
                 }
             }
         }
+
+        ctx.update_metrics(|metrics| metrics.end_time = Some(Utc::now().timestamp_millis()));
     })
 }
 

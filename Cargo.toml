@@ -3,6 +3,7 @@ members = [
     "libs/dataset",
     "libs/core",
     "libs/service",
+    "libs/protocol",
 
     "apps/server",
     "apps/cli"

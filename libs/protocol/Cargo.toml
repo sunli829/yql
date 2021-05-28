@@ -1,0 +1,13 @@
+[package]
+name = "yql-protocol"
+version = "0.1.0"
+authors = ["Sunli <scott_s829@163.com>"]
+edition = "2018"
+
+[dependencies]
+tonic = "0.4.3"
+serde = { version = "1.0", features = ["derive"] }
+prost = "0.7"
+
+[build-dependencies]
+tonic-build = "0.4.2"

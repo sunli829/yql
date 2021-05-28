@@ -87,6 +87,7 @@ pub fn create_source_stream(
         rx_barrier: BroadcastStream::new(rx_barrier),
         input,
     };
+    let exec_ctx = ctx.ctx.clone();
 
     Ok(Box::pin(async_stream::try_stream! {
         let mut current_state = None;
@@ -115,6 +116,7 @@ pub fn create_source_stream(
                 }
                 Message::DataSet(item) => {
                     let SourceDataSet { state, dataset } = item?;
+                    exec_ctx.update_metrics(|metrics| metrics.num_input_rows += dataset.len());
                     current_state = Some(state);
                     let new_dataset = process_dataset(
                         schema.clone(),
