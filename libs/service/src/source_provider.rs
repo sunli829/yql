@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use url::Url;
-use yql_core::dataset::CsvOptions;
 use yql_core::sql::SqlSourceProvider;
 use yql_core::{sources, SourceProviderWrapper};
 
@@ -16,13 +15,11 @@ pub fn create_source_provider(definition: &SourceDefinition) -> Result<SqlSource
 
     if let Ok(path) = url.to_file_path() {
         if path.extension().and_then(|ext| ext.to_str()) == Some("csv") {
-            let options = match url.query() {
-                Some(query) => serde_qs::from_str::<CsvOptions>(query)
-                    .with_context(|| "failed to parse csv options")?,
-                None => CsvOptions::default(),
-            };
-            let source_provider = sources::Csv::new(options, Some(definition.schema.clone()), path)
-                .with_context(|| "failed to create csv reader")?;
+            let options =
+                serde_qs::from_str::<sources::csv::Options>(url.query().unwrap_or_default())
+                    .with_context(|| "failed to parse csv options")?;
+            let source_provider =
+                sources::csv::Provider::new(options, definition.schema.clone(), path);
             return Ok(SqlSourceProvider {
                 source_provider: Arc::new(SourceProviderWrapper(source_provider)),
                 time_expr: definition.time_expr.clone(),

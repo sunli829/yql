@@ -2,45 +2,48 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use futures_util::stream::BoxStream;
+use serde::{Deserialize, Serialize};
 
 use crate::dataset::{CsvOptions, SchemaRef};
 use crate::{GenericSourceDataSet, GenericSourceProvider};
 
 const DEFAULT_BATCH_SIZE: usize = 10000;
 
-pub struct Csv {
-    options: CsvOptions,
+#[derive(Serialize, Deserialize)]
+pub struct Options {
+    #[serde(default = "default_delimiter")]
+    pub delimiter: u8,
+    #[serde(default)]
+    pub has_header: bool,
+    #[serde(default = "default_batch_size")]
+    pub batch_size: usize,
+}
+
+fn default_delimiter() -> u8 {
+    b','
+}
+
+fn default_batch_size() -> usize {
+    DEFAULT_BATCH_SIZE
+}
+
+pub struct Provider {
+    options: Options,
     schema: SchemaRef,
-    batch_size: usize,
     path: PathBuf,
 }
 
-impl Csv {
-    pub fn new(
-        options: CsvOptions,
-        schema: Option<SchemaRef>,
-        path: impl AsRef<Path>,
-    ) -> Result<Self> {
-        let schema = match schema {
-            Some(schema) => schema,
-            None => options.infer_schema_from_path(path.as_ref())?,
-        };
-        Ok(Self {
+impl Provider {
+    pub fn new(options: Options, schema: SchemaRef, path: impl AsRef<Path>) -> Self {
+        Self {
             options,
-            batch_size: DEFAULT_BATCH_SIZE,
             schema,
             path: path.as_ref().to_path_buf(),
-        })
-    }
-
-    pub fn with_batch_size(self, batch_size: usize) -> Self {
-        assert!(batch_size > 0);
-        Self { batch_size, ..self }
+        }
     }
 }
 
-#[allow(clippy::type_complexity)]
-impl GenericSourceProvider for Csv {
+impl GenericSourceProvider for Provider {
     type State = usize;
 
     fn provider_name(&self) -> &'static str {
@@ -55,7 +58,11 @@ impl GenericSourceProvider for Csv {
         &self,
         position: Option<Self::State>,
     ) -> Result<BoxStream<'static, Result<GenericSourceDataSet<Self::State>>>> {
-        let mut reader = self.options.open_path(self.schema.clone(), &self.path)?;
+        let mut reader = CsvOptions {
+            delimiter: self.options.delimiter,
+            has_header: self.options.has_header,
+        }
+        .open_path(self.schema.clone(), &self.path)?;
         let mut position = if let Some(position) = position {
             reader.skip(position)?;
             position
@@ -63,7 +70,7 @@ impl GenericSourceProvider for Csv {
             0
         };
 
-        let batch_size = self.batch_size;
+        let batch_size = self.options.batch_size;
         Ok(Box::pin(async_stream::try_stream! {
             loop {
                 let dataset = reader.read_batch(Some(batch_size))?;

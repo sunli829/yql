@@ -1,3 +1,2 @@
-mod csv;
-
-pub use self::csv::Csv;
+pub mod csv;
+pub mod kafka;
