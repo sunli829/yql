@@ -42,7 +42,7 @@ impl GenericSourceProvider for Provider {
 
     fn create_stream(
         &self,
-        state: Option<Self::State>,
+        _: Option<Self::State>,
     ) -> Result<BoxStream<'static, Result<GenericSourceDataSet<Self::State>>>> {
         let consumer: StreamConsumer = ClientConfig::new()
             .set("group.id", &self.options.group_id)

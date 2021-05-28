@@ -73,7 +73,7 @@ impl Storage {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let mut opts = Options::default();
         opts.create_if_missing(true);
-        opts.set_compression_type(DBCompressionType::Lz4);
+        opts.set_compression_type(DBCompressionType::Zstd);
 
         let db = Storage {
             db: DB::open(&opts, path)?,

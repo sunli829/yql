@@ -1,7 +1,11 @@
+mod json;
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::dataset::{DataSet, SchemaRef};
+
+use json::parse_json;
 
 #[derive(Copy, Clone, Serialize, Deserialize)]
 pub enum DataFormat {
@@ -16,6 +20,8 @@ impl Default for DataFormat {
 
 impl DataFormat {
     pub fn parse(&self, schema: SchemaRef, data: &[u8]) -> Result<DataSet> {
-        todo!()
+        match self {
+            DataFormat::Json => parse_json(schema, data),
+        }
     }
 }

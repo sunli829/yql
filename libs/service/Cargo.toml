@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 yql-core = { path = "../core" }
 
-rocksdb = "0.16.0"
+rocksdb = { version = "0.16.0", default-features = false, features = ["snappy", "zstd", "zlib", "bzip2"] }
 bincode = "1.3.3"
 serde = { version = "1.0.126", features = ["derive"] }
 anyhow = "1.0.40"
