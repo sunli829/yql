@@ -96,7 +96,6 @@ impl yql_protocol::yql_server::Yql for RpcYqlService {
                 }
                 Err(err) => {
                     tx.send(Err(Status::internal(err.to_string()))).await.ok();
-                    return;
                 }
             }
         });

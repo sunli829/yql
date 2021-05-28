@@ -352,15 +352,13 @@ pub const F_FILTER: Function = Function {
                     } else {
                         builder.append(false);
                     }
+                } else if state.filter_all {
+                    builder.append(false);
+                } else if x {
+                    state.filter_all = true;
+                    builder.append(true);
                 } else {
-                    if state.filter_all {
-                        builder.append(false);
-                    } else if x {
-                        state.filter_all = true;
-                        builder.append(true);
-                    } else {
-                        builder.append(false);
-                    }
+                    builder.append(false);
                 }
             }
 
