@@ -96,7 +96,7 @@ macro_rules! max_min {
         Ok(Arc::new(builder.finish()))
     }};
 }
-//
+
 macro_rules! make_max_min_func {
     ($ident:ident, $name:literal, $func:ident) => {
         pub const $ident: Function = Function {
