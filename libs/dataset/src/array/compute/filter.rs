@@ -97,7 +97,6 @@ mod tests {
         Arc::new(StringArray::new_scalar(1000, Some("hello")))
     }
 
-
     #[test]
     fn test_filter_i32_array() {
         let array_i32 = create_i32_array();
@@ -146,11 +145,16 @@ mod tests {
 
         let array_string = array.downcast_ref::<StringArray>();
         for x in 0..array.len() {
-            assert_eq!(array_string.value_opt(x), Some(map_to_string(x * 2).as_str()));
+            assert_eq!(
+                array_string.value_opt(x),
+                Some(map_to_string(x * 2).as_str())
+            );
         }
 
         let mut builder = StringBuilder::default();
-        (0..1000).step_by(2).for_each(|x| builder.append(&map_to_string(x)));
+        (0..1000)
+            .step_by(2)
+            .for_each(|x| builder.append(&map_to_string(x)));
         let array_string_2 = builder.finish();
         assert!(array_string.eq(&array_string_2));
     }
@@ -167,7 +171,6 @@ mod tests {
             assert_eq!(scalar_array_string.value_opt(x), Some("hello"));
         }
 
-
         let scalar_array_string_2 = StringArray::new_scalar(500, Some("hello"));
         assert!(scalar_array_string.eq(&scalar_array_string_2));
 
@@ -176,7 +179,6 @@ mod tests {
         let scalar_array_string_2 = builder.finish();
         assert!(scalar_array_string.eq(&scalar_array_string_2));
     }
-
 
     #[test]
     #[should_panic]
