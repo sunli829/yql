@@ -269,8 +269,8 @@ impl BinaryOperator {
                 }
             }
             Plus | Minus | Multiply | Divide => {
-                if (left.is_float() && right.is_integer())
-                    || (left.is_integer() && right.is_float())
+                if (left.is_float() && right.is_numeric())
+                    || (left.is_numeric() && right.is_float())
                 {
                     Ok(DataType::Float64)
                 } else if left.is_integer() && right.is_integer() {
