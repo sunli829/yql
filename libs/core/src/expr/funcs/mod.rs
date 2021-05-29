@@ -1,11 +1,14 @@
 mod aggregate;
 mod f_logic;
 mod f_ref;
+mod f_stat;
 mod math;
+mod utils;
 
 use aggregate::*;
 use f_logic::*;
 use f_ref::*;
+use f_stat::*;
 use math::*;
 
 use crate::expr::func::Function;
@@ -24,6 +27,9 @@ const FUNCS: &[Function] = &[
     
     // f.logic
     F_BETWEEN, F_CROSS, F_LONGCROSS,
+    
+    // f.stat
+    F_AVEDEV, F_DEVSQ, F_FORCAST, F_SLOPE, F_STD, F_STDDEV, F_STDP, F_VAR, F_VARP,
 ];
 
 pub fn find_function(namespace: Option<&str>, name: &str) -> Option<&'static Function> {

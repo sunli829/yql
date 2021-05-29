@@ -10,24 +10,8 @@ use crate::array::{
     Int8Type, PrimitiveArray, PrimitiveBuilder, Scalar, StringArray, StringBuilder, TimestampType,
 };
 use crate::expr::func::{Function, FunctionType, StatefulFunction};
+use crate::expr::funcs::utils::VecDequeExt;
 use crate::expr::signature::Signature;
-
-trait VecDequeExt<T> {
-    fn push_back_limit(&mut self, x: T, limit: usize) -> Option<T>;
-}
-
-impl<T> VecDequeExt<T> for VecDeque<T> {
-    fn push_back_limit(&mut self, x: T, limit: usize) -> Option<T> {
-        if self.len() == limit {
-            let res = self.pop_front();
-            self.push_back(x);
-            res
-        } else {
-            self.push_back(x);
-            None
-        }
-    }
-}
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 struct AllState {
