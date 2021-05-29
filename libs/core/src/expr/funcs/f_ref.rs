@@ -715,7 +715,7 @@ macro_rules! ref_values {
                 },
                 n as usize + 1,
             );
-            if $state.values.len() == n as usize {
+            if $state.values.len() == n as usize + 1 {
                 match $state.values.iter().next() {
                     Some(Scalar::$scalar_ty(value)) => builder.append(*value),
                     _ => builder.append_null(),
@@ -768,7 +768,7 @@ pub const F_REF: Function = Function {
                             },
                             n as usize + 1,
                         );
-                        if state.values.len() == n as usize {
+                        if state.values.len() == n as usize + 1 {
                             match state.values.iter().next() {
                                 Some(Scalar::String(value)) => builder.append(value),
                                 _ => builder.append_null(),
