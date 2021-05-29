@@ -1,9 +1,11 @@
+use std::hash::{Hash, Hasher};
+
 use chrono_tz::Tz;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
 /// The sets of data types.
-#[derive(Debug, Copy, Clone, Display, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Display, Serialize, Deserialize)]
 pub enum DataType {
     /// Null type
     #[display(fmt = "null")]
@@ -46,25 +48,41 @@ pub enum DataType {
     String,
 }
 
+impl Hash for DataType {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            DataType::Null => 0i32.hash(state),
+            DataType::Int8 => 1i32.hash(state),
+            DataType::Int16 => 2i32.hash(state),
+            DataType::Int32 => 3i32.hash(state),
+            DataType::Int64 => 4i32.hash(state),
+            DataType::Float32 => 5i32.hash(state),
+            DataType::Float64 => 6i32.hash(state),
+            DataType::Boolean => 7i32.hash(state),
+            DataType::Timestamp(_) => 8i32.hash(state),
+            DataType::String => 9i32.hash(state),
+        }
+    }
+}
+
 impl Eq for DataType {}
 
 impl PartialEq for DataType {
     fn eq(&self, other: &Self) -> bool {
         use DataType::*;
-
-        match (self, other) {
-            (Null, Null) => true,
-            (Int8, Int8) => true,
-            (Int16, Int16) => true,
-            (Int32, Int32) => true,
-            (Int64, Int64) => true,
-            (Float32, Float32) => true,
-            (Float64, Float64) => true,
-            (Boolean, Boolean) => true,
-            (Timestamp(_), Timestamp(_)) => true,
-            (String, String) => true,
-            _ => false,
-        }
+        matches!(
+            (self, other),
+            (Null, Null)
+                | (Int8, Int8)
+                | (Int16, Int16)
+                | (Int32, Int32)
+                | (Int64, Int64)
+                | (Float32, Float32)
+                | (Float64, Float64)
+                | (Boolean, Boolean)
+                | (Timestamp(_), Timestamp(_))
+                | (String, String)
+        )
     }
 }
 

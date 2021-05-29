@@ -713,13 +713,15 @@ macro_rules! ref_values {
                     Some(x) => Scalar::$scalar_ty(x),
                     None => Scalar::Null,
                 },
-                n as usize,
+                n as usize + 1,
             );
             if $state.values.len() == n as usize {
                 match $state.values.iter().next() {
                     Some(Scalar::$scalar_ty(value)) => builder.append(*value),
                     _ => builder.append_null(),
                 }
+            } else {
+                builder.append_null();
             }
         }
         Ok(Arc::new(builder.finish()))
@@ -764,13 +766,15 @@ pub const F_REF: Function = Function {
                                 Some(x) => Scalar::String(x.into()),
                                 None => Scalar::Null,
                             },
-                            n as usize,
+                            n as usize + 1,
                         );
                         if state.values.len() == n as usize {
                             match state.values.iter().next() {
                                 Some(Scalar::String(value)) => builder.append(value),
                                 _ => builder.append_null(),
                             }
+                        } else {
+                            builder.append_null();
                         }
                     }
                     Ok(Arc::new(builder.finish()))

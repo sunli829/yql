@@ -23,7 +23,7 @@ const FUNCS: &[Function] = &[
     F_HHVBARS, F_LLVBARS, F_LAST, F_MA, F_MEMA, F_REF, F_SMA, F_SUM, F_WMA,
     
     // f.logic
-    F_BETWEEN,
+    F_BETWEEN, F_CROSS, F_LONGCROSS,
 ];
 
 pub fn find_function(namespace: Option<&str>, name: &str) -> Option<&'static Function> {
