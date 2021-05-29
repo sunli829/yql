@@ -5,7 +5,7 @@ use serde::Serialize;
 use crate::array::{ArrayRef, DataType};
 use crate::expr::signature::Signature;
 
-pub trait StatefulFunction: dyn_clone::DynClone + Sync + Send + 'static {
+pub trait GenericStatefulFunction: dyn_clone::DynClone + Sync + Send + 'static {
     fn call(&mut self, args: &[ArrayRef]) -> Result<ArrayRef>;
 
     fn save_state(&self) -> Result<Vec<u8>>;
@@ -13,10 +13,10 @@ pub trait StatefulFunction: dyn_clone::DynClone + Sync + Send + 'static {
     fn load_state(&mut self, state: Vec<u8>) -> Result<()>;
 }
 
-dyn_clone::clone_trait_object!(StatefulFunction);
+dyn_clone::clone_trait_object!(GenericStatefulFunction);
 
 #[derive(Clone)]
-pub struct AggregateFunction<T>
+pub struct StatefulFunction<T>
 where
     T: Serialize + DeserializeOwned + Clone + Sync + Send + Default + 'static,
 {
@@ -24,7 +24,7 @@ where
     f: fn(&mut T, &[ArrayRef]) -> Result<ArrayRef>,
 }
 
-impl<T> AggregateFunction<T>
+impl<T> StatefulFunction<T>
 where
     T: Serialize + DeserializeOwned + Clone + Sync + Send + Default + 'static,
 {
@@ -36,7 +36,7 @@ where
     }
 }
 
-impl<T> StatefulFunction for AggregateFunction<T>
+impl<T> GenericStatefulFunction for StatefulFunction<T>
 where
     T: Serialize + DeserializeOwned + Clone + Sync + Send + Default + 'static,
 {
@@ -60,12 +60,12 @@ where
 #[derive(Clone)]
 pub enum FunctionType {
     Stateless(fn(&[ArrayRef]) -> Result<ArrayRef>),
-    Stateful(fn() -> Box<dyn StatefulFunction>),
+    Stateful(fn() -> Box<dyn GenericStatefulFunction>),
 }
 
 impl FunctionType {
     #[cfg(test)]
-    pub fn create_stateful_fun(&self) -> Box<dyn StatefulFunction> {
+    pub fn create_stateful_fun(&self) -> Box<dyn GenericStatefulFunction> {
         match self {
             FunctionType::Stateless(_) => panic!("not a stateful function!"),
             FunctionType::Stateful(f) => f(),

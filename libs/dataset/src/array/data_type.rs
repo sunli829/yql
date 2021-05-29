@@ -3,7 +3,7 @@ use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
 /// The sets of data types.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Display, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Display, Hash, Serialize, Deserialize)]
 pub enum DataType {
     /// Null type
     #[display(fmt = "null")]
@@ -44,6 +44,28 @@ pub enum DataType {
     /// A variable-length string in Unicode with UTF-8 encoding.
     #[display(fmt = "string")]
     String,
+}
+
+impl Eq for DataType {}
+
+impl PartialEq for DataType {
+    fn eq(&self, other: &Self) -> bool {
+        use DataType::*;
+
+        match (self, other) {
+            (Null, Null) => true,
+            (Int8, Int8) => true,
+            (Int16, Int16) => true,
+            (Int32, Int32) => true,
+            (Int64, Int64) => true,
+            (Float32, Float32) => true,
+            (Float64, Float64) => true,
+            (Boolean, Boolean) => true,
+            (Timestamp(_), Timestamp(_)) => true,
+            (String, String) => true,
+            _ => false,
+        }
+    }
 }
 
 impl DataType {

@@ -5,16 +5,16 @@ use crate::array::{
     Int16Type, Int32Type, Int64Builder, Int64Type, Int8Type, NullArray, PrimitiveArray,
     PrimitiveBuilder, Scalar, StringArray, StringBuilder, TimestampType,
 };
-use crate::expr::func::{AggregateFunction, Function, FunctionType};
+use crate::expr::func::{Function, FunctionType, StatefulFunction};
 use crate::expr::signature::Signature;
 
 pub const AVG: Function = Function {
     namespace: None,
     name: "avg",
-    signature: &Signature::Uniform(1, &[DataType::Float64]),
+    signature: &Signature::Exact(&[DataType::Float64]),
     return_type: |_| DataType::Float64,
     function_type: FunctionType::Stateful(|| {
-        Box::new(AggregateFunction::<(f64, f64)>::new(|state, args| {
+        Box::new(StatefulFunction::<(f64, f64)>::new(|state, args| {
             let array = args[0].downcast_ref::<Float64Array>();
             let mut builder = Float64Builder::with_capacity(array.len());
             for value in array.iter_opt() {
@@ -32,10 +32,10 @@ pub const AVG: Function = Function {
 pub const SUM: Function = Function {
     namespace: None,
     name: "sum",
-    signature: &Signature::Uniform(1, &[DataType::Float64]),
+    signature: &Signature::Exact(&[DataType::Float64]),
     return_type: |_| DataType::Float64,
     function_type: FunctionType::Stateful(|| {
-        Box::new(AggregateFunction::<f64>::new(|state, args| {
+        Box::new(StatefulFunction::<f64>::new(|state, args| {
             let array = args[0].downcast_ref::<Float64Array>();
             let mut builder = Float64Builder::with_capacity(array.len());
             for value in array.iter_opt() {
@@ -55,7 +55,7 @@ pub const COUNT: Function = Function {
     signature: &Signature::Any(1),
     return_type: |_| DataType::Float64,
     function_type: FunctionType::Stateful(|| {
-        Box::new(AggregateFunction::<i64>::new(|state, args| {
+        Box::new(StatefulFunction::<i64>::new(|state, args| {
             let array = &args[0];
             let mut builder = Int64Builder::with_capacity(array.len());
             for i in 0..args[0].len() {
@@ -115,7 +115,7 @@ macro_rules! make_max_min_func {
             ),
             return_type: |args| args[0],
             function_type: FunctionType::Stateful(|| {
-                Box::new(AggregateFunction::<Scalar>::new(|state, args| {
+                Box::new(StatefulFunction::<Scalar>::new(|state, args| {
                     let array = &args[0];
                     match array.data_type() {
                         DataType::Float64 => {
@@ -181,7 +181,7 @@ pub const FIRST: Function = Function {
     signature: &Signature::Any(1),
     return_type: |args| args[0],
     function_type: FunctionType::Stateful(|| {
-        Box::new(AggregateFunction::<Scalar>::new(|state, args| {
+        Box::new(StatefulFunction::<Scalar>::new(|state, args| {
             let array = &args[0];
             match array.data_type() {
                 DataType::Null => Ok(Arc::new(NullArray::new(array.len()))),
@@ -252,7 +252,7 @@ pub const LAST: Function = Function {
     signature: &Signature::Any(1),
     return_type: |args| args[0],
     function_type: FunctionType::Stateful(|| {
-        Box::new(AggregateFunction::<Scalar>::new(|state, args| {
+        Box::new(StatefulFunction::<Scalar>::new(|state, args| {
             let array = &args[0];
             match array.data_type() {
                 DataType::Null => Ok(Arc::new(NullArray::new(array.len()))),

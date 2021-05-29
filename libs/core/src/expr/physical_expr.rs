@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 
 use crate::array::{ArrayRef, DataType};
 use crate::dataset::DataSet;
-use crate::expr::func::StatefulFunction;
+use crate::expr::func::GenericStatefulFunction;
 use crate::expr::{cast, BinaryOperator, Literal, UnaryOperator};
 
 #[derive(Clone)]
@@ -41,7 +41,7 @@ pub type ExprState = Vec<u8>;
 pub struct PhysicalExpr {
     pub(crate) root: PhysicalNode,
     pub(crate) data_type: DataType,
-    pub(crate) stateful_funcs: Vec<Box<dyn StatefulFunction>>,
+    pub(crate) stateful_funcs: Vec<Box<dyn GenericStatefulFunction>>,
 }
 
 impl PhysicalExpr {
@@ -79,7 +79,7 @@ impl PhysicalExpr {
 #[inline]
 fn internal_eval(
     op: &mut PhysicalNode,
-    stateful_funcs: &mut [Box<dyn StatefulFunction>],
+    stateful_funcs: &mut [Box<dyn GenericStatefulFunction>],
     dataset: &DataSet,
 ) -> Result<ArrayRef> {
     match op {

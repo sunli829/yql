@@ -2,7 +2,7 @@ use anyhow::Error;
 
 use crate::array::DataType;
 use crate::dataset::SchemaRef;
-use crate::expr::func::{FunctionType, StatefulFunction};
+use crate::expr::func::{FunctionType, GenericStatefulFunction};
 use crate::expr::funcs::find_function;
 use crate::expr::physical_expr::{PhysicalExpr, PhysicalFunction, PhysicalNode};
 use crate::expr::Expr;
@@ -11,7 +11,7 @@ pub type Result<T, E = Error> = std::result::Result<(T, DataType), E>;
 
 struct Context {
     schema: SchemaRef,
-    stateful_funcs: Vec<Box<dyn StatefulFunction>>,
+    stateful_funcs: Vec<Box<dyn GenericStatefulFunction>>,
 }
 
 fn to_physical(ctx: &mut Context, expr: Expr) -> Result<PhysicalNode> {

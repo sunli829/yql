@@ -1,12 +1,12 @@
 mod aggregate;
+mod f_logic;
+mod f_ref;
 mod math;
 
-mod f_ref;
-
 use aggregate::*;
-use math::*;
-
+use f_logic::*;
 use f_ref::*;
+use math::*;
 
 use crate::expr::func::Function;
 
@@ -18,8 +18,12 @@ const FUNCS: &[Function] = &[
     // aggregate
     AVG, SUM, COUNT, MIN, MAX, FIRST, LAST,
     
-    // ref
-    F_ALL, F_ANY, F_BARSLAST, F_BARSSINCE, F_COUNT, F_DMA, F_EMA, F_FILTER,
+    // f.ref
+    F_ALL, F_ANY, F_BARSLAST, F_BARSSINCE, F_COUNT, F_DMA, F_EMA, F_FILTER, F_HHV, F_LLV, 
+    F_HHVBARS, F_LLVBARS, F_LAST, F_MA, F_MEMA, F_REF, F_SMA, F_SUM, F_WMA,
+    
+    // f.logic
+    F_BETWEEN,
 ];
 
 pub fn find_function(namespace: Option<&str>, name: &str) -> Option<&'static Function> {
