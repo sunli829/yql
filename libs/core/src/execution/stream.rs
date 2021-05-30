@@ -22,7 +22,12 @@ pub struct CreateStreamContext {
     pub prev_state: HashMap<usize, Vec<u8>>,
 }
 
-pub trait DataSetStream: Stream<Item = Result<DataSet>> {
+pub struct DataSetWithWatermark {
+    pub watermark: Option<i64>,
+    pub dataset: DataSet,
+}
+
+pub trait DataSetStream: Stream<Item = Result<DataSetWithWatermark>> {
     fn save_state(&self, state: &mut HashMap<usize, Vec<u8>>) -> Result<()>;
 }
 
@@ -192,6 +197,11 @@ impl Stream for DataStream {
     type Item = Result<DataSet>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.input.poll_next_unpin(cx)
+        match self.input.poll_next_unpin(cx) {
+            Poll::Ready(Some(Ok(dataset))) => Poll::Ready(Some(Ok(dataset.dataset))),
+            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
