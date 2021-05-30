@@ -47,7 +47,9 @@ async fn main() -> Result<()> {
                     .await
                 {
                     Ok(resp) => {
-                        let mut stream = resp.into_inner();
+                        let stream = resp.into_inner().take_until(tokio::signal::ctrl_c());
+                        tokio::pin!(stream);
+
                         let mut first = true;
 
                         while let Some(res) = stream.next().await {
