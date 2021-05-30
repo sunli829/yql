@@ -9,7 +9,7 @@ use futures_util::stream::BoxStream;
 use futures_util::StreamExt;
 use yql_dataset::dataset::DataSet;
 
-use crate::execution::stream::create_data_stream;
+use crate::execution::stream::DataStream;
 use crate::expr::Expr;
 use crate::planner::logical_plan::{
     LogicalAggregatePlan, LogicalFilterPlan, LogicalPlan, LogicalProjectionPlan, LogicalSourcePlan,
@@ -66,47 +66,11 @@ impl DataFrame {
         }))
     }
 
-    pub fn into_stream(self, ctx: Arc<ExecutionContext>) -> BoxStream<'static, Result<DataSet>> {
-        self.into_stream_with_graceful_shutdown(
-            ctx,
-            Option::<futures_util::future::Pending<()>>::None,
-        )
-    }
-
-    pub fn into_stream_with_graceful_shutdown(
+    pub fn into_stream(
         self,
         ctx: Arc<ExecutionContext>,
-        signal: Option<impl Future<Output = ()> + Send + 'static>,
-    ) -> BoxStream<'static, Result<DataSet>> {
-        create_data_stream(ctx, self.0, signal)
-    }
-
-    pub fn into_task(
-        self,
-        ctx: Arc<ExecutionContext>,
-        sink_provider: impl SinkProvider,
-    ) -> BoxFuture<'static, Result<()>> {
-        self.into_task_with_graceful_shutdown(
-            ctx,
-            sink_provider,
-            Option::<futures_util::future::Pending<()>>::None,
-        )
-    }
-
-    pub fn into_task_with_graceful_shutdown(
-        self,
-        ctx: Arc<ExecutionContext>,
-        sink_provider: impl SinkProvider,
-        signal: Option<impl Future<Output = ()> + Send + 'static>,
-    ) -> BoxFuture<'static, Result<()>> {
-        let mut stream = self.into_stream_with_graceful_shutdown(ctx, signal);
-        Box::pin(async move {
-            let mut sink = sink_provider.create()?;
-            while let Some(res) = stream.next().await {
-                let dataset = res?;
-                sink.send(dataset).await?;
-            }
-            Ok(())
-        })
+        state: Option<Vec<u8>>,
+    ) -> Result<DataStream> {
+        DataStream::new(ctx, self.0, state)
     }
 }

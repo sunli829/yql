@@ -11,7 +11,7 @@ mod source_provider;
 
 pub use dataframe::{dsl, DataFrame};
 pub use execution::execution_context::{ExecutionContext, ExecutionMetrics};
-pub use execution::storage::Storage;
+pub use execution::stream::DataStream;
 pub use planner::window::Window;
 pub use sink_provider::{BoxSink, Sink, SinkProvider};
 pub use source_provider::{
