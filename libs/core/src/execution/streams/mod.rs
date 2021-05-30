@@ -9,11 +9,11 @@ use crate::execution::stream::{BoxDataSetStream, CreateStreamContext};
 use crate::planner::physical_plan::PhysicalNode;
 
 pub fn create_stream(
-    ctx: &mut CreateStreamContext,
+    create_ctx: &mut CreateStreamContext,
     node: PhysicalNode,
 ) -> Result<BoxDataSetStream> {
     match node {
-        PhysicalNode::Source(source) => source::create_source_stream(ctx, source),
+        PhysicalNode::Source(source) => source::create_source_stream(create_ctx, source),
         PhysicalNode::Projection(projection) => {
             todo!()
             //projection::create_projection_stream(ctx, projection)

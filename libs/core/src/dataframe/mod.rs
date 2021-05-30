@@ -1,12 +1,8 @@
 pub mod dsl;
 
-use std::future::Future;
 use std::sync::Arc;
 
 use anyhow::Result;
-use futures_util::future::BoxFuture;
-use futures_util::stream::BoxStream;
-use futures_util::StreamExt;
 use yql_dataset::dataset::DataSet;
 
 use crate::execution::stream::DataStream;
