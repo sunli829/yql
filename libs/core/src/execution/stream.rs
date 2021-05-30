@@ -26,7 +26,7 @@ pub trait DataSetStream: Stream<Item = Result<DataSet>> {
     fn save_state(&self, state: &mut HashMap<usize, Vec<u8>>) -> Result<()>;
 }
 
-type BoxDataSetStream = Pin<Box<dyn DataSetStream + Send + 'static>>;
+pub type BoxDataSetStream = Pin<Box<dyn DataSetStream + Send + 'static>>;
 
 //
 // enum Message {
