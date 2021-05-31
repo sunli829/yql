@@ -80,3 +80,16 @@ impl Stream for DataStream {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::dsl::*;
+    use crate::sources::test_harness::Provider;
+    use crate::DataFrame;
+
+    fn create_source_provider() -> Provider {}
+
+    fn test_source_stream() {
+        DataFrame::new()
+    }
+}
