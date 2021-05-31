@@ -3,7 +3,6 @@ pub mod dsl;
 use std::sync::Arc;
 
 use anyhow::Result;
-use yql_dataset::dataset::DataSet;
 
 use crate::execution::stream::DataStream;
 use crate::expr::Expr;
@@ -12,7 +11,7 @@ use crate::planner::logical_plan::{
 };
 use crate::sql::ast::Select;
 use crate::sql::SqlContext;
-use crate::{ExecutionContext, SinkProvider, SourceProvider, Window};
+use crate::{SourceProvider, Window};
 
 pub struct DataFrame(LogicalPlan);
 
@@ -62,11 +61,7 @@ impl DataFrame {
         }))
     }
 
-    pub fn into_stream(
-        self,
-        ctx: Arc<ExecutionContext>,
-        state: Option<Vec<u8>>,
-    ) -> Result<DataStream> {
-        DataStream::new(ctx, self.0, state)
+    pub fn into_stream(self, state: Option<Vec<u8>>) -> Result<DataStream> {
+        DataStream::new(self.0, state)
     }
 }

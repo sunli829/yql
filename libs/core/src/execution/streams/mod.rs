@@ -1,6 +1,6 @@
-// mod aggregate;
-// mod filter;
-// mod projection;
+mod aggregate;
+mod filter;
+mod projection;
 mod source;
 
 use anyhow::Result;
@@ -15,16 +15,11 @@ pub fn create_stream(
     match node {
         PhysicalNode::Source(source) => source::create_source_stream(create_ctx, source),
         PhysicalNode::Projection(projection) => {
-            todo!()
-            //projection::create_projection_stream(ctx, projection)
+            projection::create_projection_stream(create_ctx, projection)
         }
-        PhysicalNode::Filter(filter) => {
-            todo!()
-            //filter::create_filter_stream(ctx, filter)
-        }
+        PhysicalNode::Filter(filter) => filter::create_filter_stream(create_ctx, filter),
         PhysicalNode::Aggregate(aggregate) => {
-            todo!()
-            // aggregate::create_aggregate_stream(ctx, aggregate)
+            aggregate::create_aggregate_stream(create_ctx, aggregate)
         }
     }
 }

@@ -1,9 +1,11 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use ahash::AHashMap;
 use anyhow::Result;
-use futures_util::StreamExt;
+use futures_util::{Stream, StreamExt};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +16,9 @@ use crate::array::{
 };
 use crate::dataset::{DataSet, SchemaRef};
 use crate::execution::dataset::{DataSetExt, GroupedKey};
-use crate::execution::stream::{CreateStreamContext, Event, EventStream};
+use crate::execution::stream::{
+    BoxDataSetStream, CreateStreamContext, DataSetStream, DataSetWithWatermark,
+};
 use crate::execution::streams::create_stream;
 use crate::expr::physical_expr::PhysicalExpr;
 use crate::expr::ExprState;
@@ -33,6 +37,39 @@ macro_rules! append_primitive_value {
         }
         $columns.push(Arc::new(builder.finish()));
     }};
+}
+
+pub fn create_aggregate_stream(
+    create_ctx: &mut CreateStreamContext,
+    node: PhysicalAggregateNode,
+) -> Result<BoxDataSetStream> {
+    let PhysicalAggregateNode {
+        id,
+        schema,
+        group_exprs,
+        aggr_exprs,
+        window,
+        time_idx,
+        input,
+    } = node;
+
+    let mut stream = AggregateStream {
+        id,
+        schema,
+        group_exprs,
+        aggr_exprs,
+        window,
+        time_idx,
+        windows: Default::default(),
+        new_datasets: Default::default(),
+        last_watermark: None,
+        input: Some(create_stream(create_ctx, *input)?),
+    };
+    if let Some(data) = create_ctx.prev_state.remove(&id) {
+        stream.load_state(data)?;
+    }
+
+    Ok(Box::pin(stream))
 }
 
 type SavedWindow = (i64, i64, Vec<(GroupedKey, Vec<ExprState>, Vec<Scalar>)>);
@@ -55,16 +92,20 @@ struct WindowState {
     children: AHashMap<GroupedKey, AggregateState>,
 }
 
-pub struct AggregateManager {
+struct AggregateStream {
+    id: usize,
     schema: SchemaRef,
     group_exprs: Vec<PhysicalExpr>,
     aggr_exprs: Vec<PhysicalExpr>,
     window: Window,
     time_idx: usize,
     windows: BTreeMap<i64, WindowState>,
+    new_datasets: VecDeque<(Option<i64>, DataSet)>,
+    last_watermark: Option<i64>,
+    input: Option<BoxDataSetStream>,
 }
 
-impl AggregateManager {
+impl AggregateStream {
     fn load_state(&mut self, data: Vec<u8>) -> Result<()> {
         let saved_state: SavedState = bincode::deserialize(&data)?;
 
@@ -91,37 +132,6 @@ impl AggregateManager {
             self.windows.insert(start, window_state);
         }
         Ok(())
-    }
-
-    fn save_state(&self) -> Result<Vec<u8>> {
-        let group_exprs = self
-            .group_exprs
-            .iter()
-            .map(|expr| expr.save_state())
-            .try_collect()?;
-
-        let mut windows = Vec::new();
-        for (start, window) in &self.windows {
-            let mut groups = Vec::new();
-            for (grouped_key, aggregate_state) in &window.children {
-                groups.push((
-                    grouped_key.clone(),
-                    aggregate_state
-                        .aggr_exprs
-                        .iter()
-                        .map(|expr| expr.save_state())
-                        .try_collect()?,
-                    aggregate_state.values.clone(),
-                ));
-            }
-            windows.push((*start, window.end_time, groups));
-        }
-
-        let saved_state = SavedState {
-            group_exprs,
-            windows,
-        };
-        Ok(bincode::serialize(&saved_state)?)
     }
 
     fn process_dataset(
@@ -263,60 +273,97 @@ impl AggregateManager {
     }
 }
 
-pub fn create_aggregate_stream(
-    ctx: &mut CreateStreamContext,
-    node: PhysicalAggregateNode,
-) -> Result<EventStream> {
-    let PhysicalAggregateNode {
-        id,
-        schema,
-        group_exprs,
-        aggr_exprs,
-        window,
-        time_idx,
-        input,
-    } = node;
-    let mut manager = AggregateManager {
-        schema,
-        group_exprs,
-        aggr_exprs,
-        window,
-        time_idx,
-        windows: Default::default(),
-    };
-    if let Some(prev_state) = ctx.prev_state.remove(&id) {
-        manager.load_state(prev_state)?;
+impl DataSetStream for AggregateStream {
+    fn save_state(&self, state: &mut HashMap<usize, Vec<u8>>) -> Result<()> {
+        let group_exprs = self
+            .group_exprs
+            .iter()
+            .map(|expr| expr.save_state())
+            .try_collect()?;
+
+        let mut windows = Vec::new();
+        for (start, window) in &self.windows {
+            let mut groups = Vec::new();
+            for (grouped_key, aggregate_state) in &window.children {
+                groups.push((
+                    grouped_key.clone(),
+                    aggregate_state
+                        .aggr_exprs
+                        .iter()
+                        .map(|expr| expr.save_state())
+                        .try_collect()?,
+                    aggregate_state.values.clone(),
+                ));
+            }
+            windows.push((*start, window.end_time, groups));
+        }
+
+        let saved_state = SavedState {
+            group_exprs,
+            windows,
+        };
+        let data = bincode::serialize(&saved_state)?;
+        state.insert(self.id, data);
+        Ok(())
     }
+}
 
-    let mut input = create_stream(ctx, *input)?.fuse();
-    let mut last_watermark = None;
+impl Stream for AggregateStream {
+    type Item = Result<DataSetWithWatermark>;
 
-    Ok(Box::pin(async_stream::try_stream! {
-        while let Some(event) = input.next().await.transpose()? {
-            match event {
-                Event::DataSet{ current_watermark, dataset } => {
-                    last_watermark = Some(current_watermark);
-                    for dataset in manager.aggregate(&dataset, current_watermark)? {
-                        yield Event::DataSet{ current_watermark, dataset };
-                    }
-                }
-                Event::CreateCheckPoint(barrier) => {
-                    if !barrier.is_saved(id) {
-                        barrier.set_state(id, Some(manager.save_state()?));
-                    }
-                    yield Event::CreateCheckPoint(barrier.clone());
-                    if barrier.is_exit() {
-                        break;
-                    }
-                }
-            }
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if let Some((watermark, dataset)) = self.new_datasets.pop_front() {
+            return Poll::Ready(Some(Ok(DataSetWithWatermark { watermark, dataset })));
         }
 
-        if let Some(last_watermark) = last_watermark {
-            let datasets = manager.finish()?;
-            for dataset in datasets {
-                yield Event::DataSet{ current_watermark: last_watermark, dataset };
+        if self.input.is_some() {
+            loop {
+                match self.input.as_mut().unwrap().poll_next_unpin(cx) {
+                    Poll::Ready(Some(Ok(DataSetWithWatermark { watermark, dataset }))) => {
+                        self.last_watermark = watermark;
+                        match self.aggregate(&dataset, watermark) {
+                            Ok(new_datasets) if !new_datasets.is_empty() => {
+                                let mut iter = new_datasets.into_iter();
+                                let new_dataset = iter.next().unwrap();
+                                self.new_datasets
+                                    .extend(iter.map(|dataset| (watermark, dataset)));
+                                return Poll::Ready(Some(Ok(DataSetWithWatermark {
+                                    watermark,
+                                    dataset: new_dataset,
+                                })));
+                            }
+                            Ok(_) => {}
+                            Err(err) => return Poll::Ready(Some(Err(err))),
+                        }
+                    }
+                    Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(err))),
+                    Poll::Ready(None) => {
+                        return match self.finish() {
+                            Ok(new_datasets) if !new_datasets.is_empty() => {
+                                if let Some(last_watermark) = self.last_watermark {
+                                    let mut iter = new_datasets.into_iter();
+                                    let new_dataset = iter.next().unwrap();
+                                    self.new_datasets.extend(
+                                        iter.map(|dataset| (Some(last_watermark), dataset)),
+                                    );
+                                    self.input = None;
+                                    Poll::Ready(Some(Ok(DataSetWithWatermark {
+                                        watermark: Some(last_watermark),
+                                        dataset: new_dataset,
+                                    })))
+                                } else {
+                                    Poll::Ready(None)
+                                }
+                            }
+                            Ok(_) => Poll::Ready(None),
+                            Err(err) => Poll::Ready(Some(Err(err))),
+                        }
+                    }
+                    Poll::Pending => return Poll::Pending,
+                }
             }
+        } else {
+            Poll::Ready(None)
         }
-    }))
+    }
 }

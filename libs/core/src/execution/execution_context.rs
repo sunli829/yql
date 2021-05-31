@@ -1,13 +1,11 @@
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use tokio::time::Duration;
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ExecutionMetrics {
     pub start_time: Option<i64>,
     pub end_time: Option<i64>,
     pub num_input_rows: usize,
-    pub num_output_rows: usize,
 }
 
 pub struct ExecutionContext {

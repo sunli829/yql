@@ -6,14 +6,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use futures_util::stream::BoxStream;
-use futures_util::StreamExt;
+use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
-use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
-use tokio_stream::wrappers::BroadcastStream;
-use tokio_stream::Stream;
 
 use crate::array::{ArrayExt, BooleanBuilder, TimestampArray};
 use crate::dataset::{DataSet, SchemaRef};
+use crate::execution::execution_context::ExecutionContext;
 use crate::execution::stream::{
     BoxDataSetStream, CreateStreamContext, DataSetStream, DataSetWithWatermark,
 };
@@ -21,7 +19,7 @@ use crate::expr::physical_expr::PhysicalExpr;
 use crate::expr::ExprState;
 use crate::planner::physical_plan::PhysicalSourceNode;
 use crate::source_provider::SourceDataSet;
-use crate::{ExecutionContext, GenericSourceDataSet};
+use crate::GenericSourceDataSet;
 
 pub fn create_source_stream(
     create_ctx: &mut CreateStreamContext,

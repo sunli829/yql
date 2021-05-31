@@ -1,21 +1,16 @@
 use std::collections::HashMap;
-use std::fmt::{self, Debug, Formatter};
-use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::{Context as _, Result};
-use chrono::Utc;
-use futures_util::future::BoxFuture;
-use futures_util::stream::{BoxStream, Stream, StreamExt};
-use tokio::sync::broadcast;
-use tokio::time::Interval;
+use futures_util::stream::{Stream, StreamExt};
 
 use crate::dataset::DataSet;
 use crate::execution::execution_context::ExecutionContext;
 use crate::planner::logical_plan::LogicalPlan;
 use crate::planner::physical_plan::PhysicalPlan;
+use crate::ExecutionMetrics;
 
 pub struct CreateStreamContext {
     pub ctx: Arc<ExecutionContext>,
@@ -162,15 +157,12 @@ pub type BoxDataSetStream = Pin<Box<dyn DataSetStream + Send + 'static>>;
 // }
 
 pub struct DataStream {
+    ctx: Arc<ExecutionContext>,
     input: BoxDataSetStream,
 }
 
 impl DataStream {
-    pub(crate) fn new(
-        ctx: Arc<ExecutionContext>,
-        plan: LogicalPlan,
-        state: Option<Vec<u8>>,
-    ) -> Result<Self> {
+    pub(crate) fn new(plan: LogicalPlan, state: Option<Vec<u8>>) -> Result<Self> {
         // load previous state
         let prev_state: HashMap<usize, Vec<u8>> = match state {
             Some(data) => {
@@ -180,16 +172,26 @@ impl DataStream {
         };
 
         let mut create_ctx = CreateStreamContext {
-            ctx: ctx.clone(),
+            ctx: Arc::new(ExecutionContext::new()),
             prev_state,
         };
-        Ok(Self { input: todo!() })
+        Ok(Self {
+            ctx,
+            input: crate::execution::streams::create_stream(
+                &mut create_ctx,
+                PhysicalPlan::try_new(plan)?.root,
+            )?,
+        })
     }
 
     pub fn save_state(&self) -> Result<Vec<u8>> {
         let mut state = Default::default();
         self.input.save_state(&mut state)?;
         Ok(bincode::serialize(&state)?)
+    }
+
+    pub fn metrics(&self) -> ExecutionMetrics {
+        self.ctx.metrics()
     }
 }
 
