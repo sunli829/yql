@@ -11,6 +11,7 @@ use crate::sql::ast::Select;
 use crate::sql::SqlContext;
 use crate::{SourceProvider, Window};
 
+#[derive(Clone)]
 pub struct DataFrame(LogicalPlan);
 
 impl DataFrame {

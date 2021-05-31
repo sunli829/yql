@@ -9,6 +9,12 @@ pub struct Provider {
     datasets: Vec<DataSet>,
 }
 
+impl Provider {
+    pub fn new(schema: SchemaRef, datasets: Vec<DataSet>) -> Self {
+        Self { schema, datasets }
+    }
+}
+
 impl GenericSourceProvider for Provider {
     type State = usize;
 
