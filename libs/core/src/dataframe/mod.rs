@@ -1,7 +1,5 @@
 pub mod dsl;
 
-use std::sync::Arc;
-
 use anyhow::Result;
 
 use crate::execution::stream::DataStream;

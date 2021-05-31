@@ -1656,7 +1656,6 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
- "tokio-util",
 ]
 
 [[package]]
@@ -1969,7 +1968,6 @@ dependencies = [
  "serde",
  "smallvec",
  "tokio",
- "tokio-stream",
  "tracing",
  "yql-dataset",
 ]
@@ -2038,6 +2036,7 @@ dependencies = [
  "serde",
  "serde_qs",
  "tokio",
+ "tokio-stream",
  "url",
  "yql-core",
 ]

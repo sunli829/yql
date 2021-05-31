@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use futures_util::stream::BoxStream;
+use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use tokio_stream::StreamExt;
 
 use crate::dataset::{DataSet, SchemaRef};
 

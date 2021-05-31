@@ -1,16 +1,16 @@
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Result;
-use futures_util::future::FutureExt;
 use futures_util::stream::{BoxStream, StreamExt};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::Mutex;
 use yql_core::array::{ArrayRef, BooleanBuilder, DataType, StringArray, StringBuilder};
 use yql_core::dataset::{DataSet, Field, Schema, SchemaRef};
 use yql_core::sql::SqlSourceProvider;
-use yql_core::{DataFrame, ExecutionContext, ExecutionMetrics, SinkProvider};
+use yql_core::{DataFrame, ExecutionMetrics, SinkProvider};
 
 use crate::registry::Registry;
 use crate::sink_provider::create_sink_provider;
@@ -19,7 +19,8 @@ use crate::sql::{
     ShowType, Stmt, StmtCreateSink, StmtCreateSource, StmtCreateStream, StmtDeleteSink,
     StmtDeleteSource, StmtDeleteStream, StmtSelect, StmtShow, StmtStartStream, StmtStopStream,
 };
-use crate::storage::{Definition, SourceDefinition, Storage, StreamState};
+use crate::storage::{Definition, SourceDefinition, Storage};
+use crate::task::start_task;
 use crate::{SinkDefinition, StreamDefinition};
 
 static ACTION_RESULT_SCHEMA: Lazy<SchemaRef> = Lazy::new(|| {
@@ -90,30 +91,6 @@ impl<'a> yql_core::sql::SqlContext for SqlContext<'a> {
     }
 }
 
-struct StreamStorage {
-    name: String,
-    inner: Arc<Mutex<ServiceInner>>,
-}
-
-#[async_trait::async_trait]
-impl yql_core::Storage for StreamStorage {
-    async fn save_state(&self, data: Vec<u8>) -> Result<()> {
-        self.inner
-            .lock()
-            .await
-            .storage
-            .set_stream_state_data(&self.name, &data)
-    }
-
-    async fn load_state(&self) -> Result<Option<Vec<u8>>> {
-        self.inner
-            .lock()
-            .await
-            .storage
-            .get_stream_state_data(&self.name)
-    }
-}
-
 pub enum ExecuteStreamItem {
     DataSet(DataSet),
     Metrics(ExecutionMetrics),
@@ -125,8 +102,8 @@ pub enum ExecuteResult {
 }
 
 pub struct ServiceInner {
-    storage: Storage,
-    registry: Registry,
+    pub(crate) storage: Storage,
+    pub(crate) registry: Registry,
 }
 
 impl ServiceInner {
@@ -297,7 +274,7 @@ impl Service {
     async fn execute_start_stream(&self, stmt: StmtStartStream) -> Result<DataSet> {
         let service_inner = self.inner.clone();
 
-        let mut inner = self.inner.lock().await;
+        let inner = self.inner.lock().await;
         anyhow::ensure!(!inner.registry.is_running(&stmt.name), "already running");
 
         let definition = inner
@@ -308,47 +285,26 @@ impl Service {
             Definition::Stream(stream_definition) => stream_definition,
             _ => anyhow::bail!("not stream"),
         };
-        let sink = inner.create_sink_provider(&stream_definition.to)?;
+        let sink = inner
+            .create_sink_provider(&stream_definition.to)?
+            .create()?;
         let df = DataFrame::from_sql_select(&SqlContext(&*inner), stream_definition.select)?;
-        let ctx = Arc::new(
-            ExecutionContext::new(stmt.name.clone()).with_storage(StreamStorage {
-                name: stmt.name.clone(),
-                inner: service_inner.clone(),
-            }),
-        );
-        let (tx_shutdown, rx_shutdown) = oneshot::channel::<()>();
 
-        if stmt.restart {
+        let stream = if stmt.restart {
             inner.storage.delete_stream_state_data(&stmt.name)?;
-        }
-        let fut = df.into_task_with_graceful_shutdown(ctx, sink, Some(rx_shutdown.map(|_| ())));
+            df.into_stream(None)?
+        } else {
+            df.into_stream(inner.storage.get_stream_state_data(&stmt.name)?)?
+        };
+        let interval = tokio::time::interval(Duration::from_secs(5 * 60));
 
-        inner
-            .storage
-            .set_stream_state(&stmt.name, StreamState::Started)?;
-        inner.registry.add(&stmt.name, tx_shutdown);
-
-        let name = stmt.name.clone();
-        tokio::spawn(async move {
-            let res = fut.await;
-            let mut inner = service_inner.lock().await;
-
-            match res {
-                Ok(()) => {
-                    inner
-                        .storage
-                        .set_stream_state(&name, StreamState::Stop)
-                        .ok();
-                }
-                Err(err) => {
-                    inner
-                        .storage
-                        .set_stream_state(&name, StreamState::Error(err.to_string()))
-                        .ok();
-                }
-            }
-            inner.registry.remove(&name);
-        });
+        tokio::spawn(start_task(
+            service_inner,
+            stmt.name.clone(),
+            interval,
+            stream,
+            sink,
+        ));
 
         create_action_result_dataset("Start Stream", true)
     }
@@ -465,14 +421,14 @@ impl Service {
     ) -> Result<BoxStream<'static, Result<ExecuteStreamItem>>> {
         let inner = self.inner.lock().await;
         let df = DataFrame::from_sql_select(&SqlContext(&*inner), stmt.select)?;
-        let ctx = Arc::new(ExecutionContext::new("noname"));
-        let mut input = df.into_stream(ctx.clone());
+        let mut input = df.into_stream(None)?;
 
         Ok(Box::pin(async_stream::try_stream! {
             while let Some(dataset) = input.next().await.transpose()? {
                 yield ExecuteStreamItem::DataSet(dataset);
             }
-            yield ExecuteStreamItem::Metrics(ctx.metrics());
+            let metrics = ExecuteStreamItem::Metrics(input.metrics());
+            yield metrics;
         }))
     }
 }

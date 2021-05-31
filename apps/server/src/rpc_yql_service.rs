@@ -49,6 +49,7 @@ impl yql_protocol::yql_server::Yql for RpcYqlService {
                     .ok();
                 }
                 Ok(ExecuteResult::ExecStream(mut stream)) => {
+                    let mut num_output_rows = 0;
                     while let Some(res) = stream.next().await {
                         let item = match res {
                             Ok(item) => item,
@@ -60,6 +61,7 @@ impl yql_protocol::yql_server::Yql for RpcYqlService {
 
                         match item {
                             ExecuteStreamItem::DataSet(dataset) => {
+                                num_output_rows += dataset.len();
                                 let data = match bincode::serialize(&dataset) {
                                     Ok(data) => data,
                                     Err(err) => {
@@ -83,7 +85,7 @@ impl yql_protocol::yql_server::Yql for RpcYqlService {
                                             start_time: metrics.start_time.unwrap_or_default(),
                                             end_time: metrics.end_time.unwrap_or_default(),
                                             num_input_rows: metrics.num_input_rows as i64,
-                                            num_output_rows: metrics.num_output_rows as i64,
+                                            num_output_rows: num_output_rows as i64,
                                         },
                                     )),
                                 }))

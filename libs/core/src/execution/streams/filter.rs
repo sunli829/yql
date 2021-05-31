@@ -54,6 +54,8 @@ impl FilterStream {
 
 impl DataSetStream for FilterStream {
     fn save_state(&self, state: &mut HashMap<usize, Vec<u8>>) -> Result<()> {
+        self.input.save_state(state)?;
+
         state.insert(self.id, self.expr.save_state()?);
         Ok(())
     }

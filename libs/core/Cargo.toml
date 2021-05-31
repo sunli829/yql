@@ -17,7 +17,6 @@ dyn-clone = "1.0.4"
 bincode = "1.3.3"
 futures-util = "0.3.15"
 tokio = { version = "1.6.0", features = ["macros", "sync", "rt-multi-thread"] }
-tokio-stream = { version = "0.1.6", features = ["sync"] }
 async-stream = "0.3.2"
 tracing = "0.1.26"
 itertools = "0.10.0"

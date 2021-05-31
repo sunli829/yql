@@ -63,7 +63,8 @@ pub fn create_aggregate_stream(
         windows: Default::default(),
         new_datasets: Default::default(),
         last_watermark: None,
-        input: Some(create_stream(create_ctx, *input)?),
+        end: false,
+        input: create_stream(create_ctx, *input)?,
     };
     if let Some(data) = create_ctx.prev_state.remove(&id) {
         stream.load_state(data)?;
@@ -102,7 +103,8 @@ struct AggregateStream {
     windows: BTreeMap<i64, WindowState>,
     new_datasets: VecDeque<(Option<i64>, DataSet)>,
     last_watermark: Option<i64>,
-    input: Option<BoxDataSetStream>,
+    end: bool,
+    input: BoxDataSetStream,
 }
 
 impl AggregateStream {
@@ -275,6 +277,8 @@ impl AggregateStream {
 
 impl DataSetStream for AggregateStream {
     fn save_state(&self, state: &mut HashMap<usize, Vec<u8>>) -> Result<()> {
+        self.input.save_state(state)?;
+
         let group_exprs = self
             .group_exprs
             .iter()
@@ -316,54 +320,53 @@ impl Stream for AggregateStream {
             return Poll::Ready(Some(Ok(DataSetWithWatermark { watermark, dataset })));
         }
 
-        if self.input.is_some() {
-            loop {
-                match self.input.as_mut().unwrap().poll_next_unpin(cx) {
-                    Poll::Ready(Some(Ok(DataSetWithWatermark { watermark, dataset }))) => {
-                        self.last_watermark = watermark;
-                        match self.aggregate(&dataset, watermark) {
-                            Ok(new_datasets) if !new_datasets.is_empty() => {
+        if self.end {
+            return Poll::Ready(None);
+        }
+
+        loop {
+            match self.input.poll_next_unpin(cx) {
+                Poll::Ready(Some(Ok(DataSetWithWatermark { watermark, dataset }))) => {
+                    self.last_watermark = watermark;
+                    match self.aggregate(&dataset, watermark) {
+                        Ok(new_datasets) if !new_datasets.is_empty() => {
+                            let mut iter = new_datasets.into_iter();
+                            let new_dataset = iter.next().unwrap();
+                            self.new_datasets
+                                .extend(iter.map(|dataset| (watermark, dataset)));
+                            return Poll::Ready(Some(Ok(DataSetWithWatermark {
+                                watermark,
+                                dataset: new_dataset,
+                            })));
+                        }
+                        Ok(_) => {}
+                        Err(err) => return Poll::Ready(Some(Err(err))),
+                    }
+                }
+                Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(err))),
+                Poll::Ready(None) => {
+                    return match self.finish() {
+                        Ok(new_datasets) if !new_datasets.is_empty() => {
+                            if let Some(last_watermark) = self.last_watermark {
                                 let mut iter = new_datasets.into_iter();
                                 let new_dataset = iter.next().unwrap();
                                 self.new_datasets
-                                    .extend(iter.map(|dataset| (watermark, dataset)));
-                                return Poll::Ready(Some(Ok(DataSetWithWatermark {
-                                    watermark,
+                                    .extend(iter.map(|dataset| (Some(last_watermark), dataset)));
+                                self.end = true;
+                                Poll::Ready(Some(Ok(DataSetWithWatermark {
+                                    watermark: Some(last_watermark),
                                     dataset: new_dataset,
-                                })));
+                                })))
+                            } else {
+                                Poll::Ready(None)
                             }
-                            Ok(_) => {}
-                            Err(err) => return Poll::Ready(Some(Err(err))),
                         }
+                        Ok(_) => Poll::Ready(None),
+                        Err(err) => Poll::Ready(Some(Err(err))),
                     }
-                    Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(err))),
-                    Poll::Ready(None) => {
-                        return match self.finish() {
-                            Ok(new_datasets) if !new_datasets.is_empty() => {
-                                if let Some(last_watermark) = self.last_watermark {
-                                    let mut iter = new_datasets.into_iter();
-                                    let new_dataset = iter.next().unwrap();
-                                    self.new_datasets.extend(
-                                        iter.map(|dataset| (Some(last_watermark), dataset)),
-                                    );
-                                    self.input = None;
-                                    Poll::Ready(Some(Ok(DataSetWithWatermark {
-                                        watermark: Some(last_watermark),
-                                        dataset: new_dataset,
-                                    })))
-                                } else {
-                                    Poll::Ready(None)
-                                }
-                            }
-                            Ok(_) => Poll::Ready(None),
-                            Err(err) => Poll::Ready(Some(Err(err))),
-                        }
-                    }
-                    Poll::Pending => return Poll::Pending,
                 }
+                Poll::Pending => return Poll::Pending,
             }
-        } else {
-            Poll::Ready(None)
         }
     }
 }

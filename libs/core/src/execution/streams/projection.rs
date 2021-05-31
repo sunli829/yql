@@ -65,6 +65,8 @@ impl ProjectionStream {
 
 impl DataSetStream for ProjectionStream {
     fn save_state(&self, state: &mut HashMap<usize, Vec<u8>>) -> Result<()> {
+        self.input.save_state(state)?;
+
         let exprs_state = self
             .exprs
             .iter()
