@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use ahash::AHashMap;
 use anyhow::Result;
+use indexmap::IndexMap;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
@@ -118,7 +118,7 @@ pub fn group_by_exprs<'a>(
         }
     }
 
-    let mut keys_map: AHashMap<_, Vec<usize>> = AHashMap::new();
+    let mut keys_map: IndexMap<_, Vec<usize>> = IndexMap::new();
     for row in 0..dataset.len() {
         let mut grouped_key = GroupedKey::default();
         for value in record_keys[row * num_group_exprs..(row + 1) * num_group_exprs].iter_mut() {
@@ -139,7 +139,7 @@ pub fn group_by_window<'a>(
     time_idx: usize,
     window: &Window,
 ) -> Result<GroupByWindowIter<'a>> {
-    let mut windows: AHashMap<_, (i64, Vec<usize>)> = AHashMap::new();
+    let mut windows: IndexMap<_, (i64, Vec<usize>)> = IndexMap::new();
     let times = dataset.column(time_idx).unwrap();
     let tz = match dataset.schema().fields()[time_idx].data_type {
         DataType::Timestamp(tz) => tz.unwrap_or(chrono_tz::UTC),

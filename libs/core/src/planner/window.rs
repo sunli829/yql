@@ -12,7 +12,7 @@ pub enum Period {
 }
 
 impl Period {
-    pub fn window(&self, time: DateTime<Tz>) -> (DateTime<Tz>, DateTime<Tz>) {
+    pub(crate) fn window(&self, time: DateTime<Tz>) -> (DateTime<Tz>, DateTime<Tz>) {
         let start = match self {
             Period::Day => time.date().and_hms(0, 0, 0),
             Period::Week => {
@@ -56,7 +56,22 @@ pub enum Window {
 }
 
 impl Window {
-    pub fn windows(self, timestamp: i64, tz: Tz) -> Vec<(i64, i64)> {
+    #[inline]
+    pub fn fixed(length: i64) -> Self {
+        Window::Fixed { length }
+    }
+
+    #[inline]
+    pub fn sliding(length: i64, interval: i64) -> Self {
+        Window::Sliding { length, interval }
+    }
+
+    #[inline]
+    pub fn period(period: Period) -> Self {
+        Window::Period { period }
+    }
+
+    pub(crate) fn windows(self, timestamp: i64, tz: Tz) -> Vec<(i64, i64)> {
         match self {
             Window::Fixed { length } => {
                 let start = timestamp / length * length;

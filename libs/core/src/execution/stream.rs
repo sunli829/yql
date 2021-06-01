@@ -97,7 +97,7 @@ mod tests {
     use crate::dataset::{CsvOptions, DataSet, Field, Schema};
     use crate::dsl::*;
     use crate::sources::csv::{Options, Provider};
-    use crate::{DataFrame, SourceProviderWrapper};
+    use crate::{DataFrame, SourceProviderWrapper, Window};
 
     fn create_source_provider() -> Provider {
         let schema = Arc::new(
@@ -233,6 +233,8 @@ mod tests {
             )
             .unwrap()
         );
+
+        assert!(stream.next().await.is_none());
     }
 
     #[tokio::test]
@@ -311,6 +313,8 @@ mod tests {
             )
             .unwrap()
         );
+
+        assert!(stream.next().await.is_none());
     }
 
     #[tokio::test]
@@ -384,8 +388,65 @@ mod tests {
             )
             .unwrap()
         );
+
+        assert!(stream.next().await.is_none());
     }
 
     #[tokio::test]
-    async fn test_aggregate_stream() {}
+    async fn test_aggregate_stream() {
+        let provider = create_source_provider();
+        let df = DataFrame::new(
+            Arc::new(SourceProviderWrapper(provider)),
+            None,
+            Some(col("time")),
+            None,
+        )
+        .aggregate(
+            vec![col("c")],
+            vec![col("c"), call("sum", vec![col("a")]).alias("a")],
+            Window::Fixed {
+                length: 1000 * 60 * 60,
+            },
+        );
+        let output_schema = Arc::new(
+            Schema::try_new(vec![
+                Field::new("c", DataType::String),
+                Field::new("a", DataType::Float64),
+                Field::new("@time", DataType::Timestamp(None)),
+            ])
+            .unwrap(),
+        );
+
+        let mut stream = df.clone().into_stream(None).unwrap();
+        assert_eq!(
+            stream.next().await.unwrap().unwrap(),
+            DataSet::from_csv_slice(
+                output_schema.clone(),
+                CsvOptions::default(),
+                br#"
+a,10,1622509200000
+b,56,1622509200000
+"#,
+            )
+            .unwrap()
+        );
+
+        let state = stream.save_state().unwrap();
+        let mut stream = df.clone().into_stream(Some(state)).unwrap();
+        assert_eq!(
+            stream.next().await.unwrap().unwrap(),
+            DataSet::from_csv_slice(
+                output_schema.clone(),
+                CsvOptions::default(),
+                br#"
+b,12,1622512800000
+c,132,1622512800000
+d,141,1622512800000
+"#,
+            )
+            .unwrap()
+        );
+
+        assert!(stream.next().await.is_none());
+    }
 }

@@ -3,9 +3,9 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use ahash::AHashMap;
 use anyhow::Result;
 use futures_util::{Stream, StreamExt};
+use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
@@ -90,7 +90,7 @@ struct AggregateState {
 struct WindowState {
     start_time: i64,
     end_time: i64,
-    children: AHashMap<GroupedKey, AggregateState>,
+    children: IndexMap<GroupedKey, AggregateState>,
 }
 
 struct AggregateStream {
