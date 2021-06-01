@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::dataset::{CsvOptions, SchemaRef};
 use crate::{GenericSourceDataSet, GenericSourceProvider};
+use std::fs::File;
+use std::io::{Cursor, Read};
 
 const DEFAULT_BATCH_SIZE: usize = 10000;
 
@@ -27,10 +29,15 @@ fn default_batch_size() -> usize {
     DEFAULT_BATCH_SIZE
 }
 
+enum DataFrom {
+    Path(PathBuf),
+    Data(Vec<u8>),
+}
+
 pub struct Provider {
     options: Options,
     schema: SchemaRef,
-    path: PathBuf,
+    from: DataFrom,
 }
 
 impl Provider {
@@ -38,7 +45,15 @@ impl Provider {
         Self {
             options,
             schema,
-            path: path.as_ref().to_path_buf(),
+            from: DataFrom::Path(path.as_ref().to_path_buf()),
+        }
+    }
+
+    pub fn new_from_memory(options: Options, schema: SchemaRef, data: impl Into<Vec<u8>>) -> Self {
+        Self {
+            options,
+            schema,
+            from: DataFrom::Data(data.into()),
         }
     }
 }
@@ -58,11 +73,20 @@ impl GenericSourceProvider for Provider {
         &self,
         position: Option<Self::State>,
     ) -> Result<BoxStream<'static, Result<GenericSourceDataSet<Self::State>>>> {
-        let mut reader = CsvOptions {
+        let options = CsvOptions {
             delimiter: self.options.delimiter,
             has_header: self.options.has_header,
-        }
-        .open_path(self.schema.clone(), &self.path)?;
+        };
+        let mut reader = match &self.from {
+            DataFrom::Path(path) => options.open(
+                self.schema.clone(),
+                Box::new(File::open(&path)?) as Box<dyn Read + Send>,
+            ),
+            DataFrom::Data(data) => options.open(
+                self.schema.clone(),
+                Box::new(Cursor::new(data.clone())) as Box<dyn Read + Send>,
+            ),
+        };
         let mut position = if let Some(position) = position {
             reader.skip(position)?;
             position
@@ -79,7 +103,7 @@ impl GenericSourceProvider for Provider {
                 }
                 let count = dataset.len();
                 yield GenericSourceDataSet {
-                    state: position,
+                    state: position + count,
                     dataset,
                 };
                 position += count;

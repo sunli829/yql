@@ -264,6 +264,7 @@ fn expr_e(input: &str) -> IResult<&str, Expr> {
         alt((
             value(BinaryOperator::Multiply, char('*')),
             value(BinaryOperator::Divide, char('/')),
+            value(BinaryOperator::Rem, char('%')),
         )),
         expr_primitive,
     )))(input)?;

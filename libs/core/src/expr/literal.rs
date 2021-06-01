@@ -27,6 +27,38 @@ impl Display for Literal {
     }
 }
 
+macro_rules! impl_from_integers {
+    ($($ty:ty),*) => {
+        $(
+        impl From<$ty> for Literal {
+            fn from(value: $ty) -> Self {
+                Literal::Int(value as i64)
+            }
+        }
+        )*
+    };
+}
+
+impl_from_integers!(i8, i16, i32, i64, u8, u16, u32);
+
+impl From<bool> for Literal {
+    fn from(value: bool) -> Self {
+        Literal::Boolean(value)
+    }
+}
+
+impl From<&str> for Literal {
+    fn from(value: &str) -> Self {
+        Literal::String(value.to_string())
+    }
+}
+
+impl From<String> for Literal {
+    fn from(value: String) -> Self {
+        Literal::String(value)
+    }
+}
+
 impl Literal {
     pub fn data_type(&self) -> DataType {
         match self {

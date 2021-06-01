@@ -60,6 +60,84 @@ macro_rules! binary_arithmetic_array {
     };
 }
 
+macro_rules! binary_rem_array {
+    ($opcode:expr, $lhs:expr, $rhs:expr) => {
+        match ($lhs.data_type(), $rhs.data_type()) {
+            (DataType::Int8, DataType::Int8) => {
+                math_op::<Int8Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    (a as i64) % (b as i64)
+                })
+            }
+            (DataType::Int8, DataType::Int16) => {
+                math_op::<Int8Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    (a as i64) % (b as i64)
+                })
+            }
+            (DataType::Int8, DataType::Int32) => {
+                math_op::<Int8Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    (a as i64) % (b as i64)
+                })
+            }
+            (DataType::Int8, DataType::Int64) => {
+                math_op::<Int8Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) % b)
+            }
+
+            (DataType::Int16, DataType::Int8) => {
+                math_op::<Int16Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    (a as i64) % (b as i64)
+                })
+            }
+            (DataType::Int16, DataType::Int16) => {
+                math_op::<Int16Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    (a as i64) % (b as i64)
+                })
+            }
+            (DataType::Int16, DataType::Int32) => {
+                math_op::<Int16Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    (a as i64) % (b as i64)
+                })
+            }
+            (DataType::Int16, DataType::Int64) => {
+                math_op::<Int16Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) % b)
+            }
+
+            (DataType::Int32, DataType::Int8) => {
+                math_op::<Int32Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    (a as i64) % (b as i64)
+                })
+            }
+            (DataType::Int32, DataType::Int16) => {
+                math_op::<Int32Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    (a as i64) % (b as i64)
+                })
+            }
+            (DataType::Int32, DataType::Int32) => {
+                math_op::<Int32Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    (a as i64) % (b as i64)
+                })
+            }
+            (DataType::Int32, DataType::Int64) => {
+                math_op::<Int32Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) % b)
+            }
+
+            (DataType::Int64, DataType::Int8) => {
+                math_op::<Int64Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| a % (b as i64))
+            }
+            (DataType::Int64, DataType::Int16) => {
+                math_op::<Int64Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| a % (b as i64))
+            }
+            (DataType::Int64, DataType::Int32) => {
+                math_op::<Int64Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| a % (b as i64))
+            }
+            (DataType::Int64, DataType::Int64) => {
+                math_op::<Int64Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| a % b)
+            }
+
+            _ => Err(binary_error($opcode, $lhs.data_type(), $rhs.data_type())),
+        }
+    };
+}
+
 macro_rules! binary_equal_array {
     ($opcode:expr, $lhs:expr, $rhs:expr, $op:tt) => {
         match ($lhs.data_type(), $rhs.data_type()) {
@@ -235,6 +313,9 @@ pub enum BinaryOperator {
 
     #[display(fmt = "/")]
     Divide,
+
+    #[display(fmt = "%")]
+    Rem,
 }
 
 impl BinaryOperator {
@@ -279,6 +360,13 @@ impl BinaryOperator {
                     Err(binary_error(*self, left, right))
                 }
             }
+            Rem => {
+                if left.is_integer() && right.is_integer() {
+                    Ok(DataType::Int64)
+                } else {
+                    Err(binary_error(*self, left, right))
+                }
+            }
         }
     }
 
@@ -301,6 +389,7 @@ impl BinaryOperator {
             BinaryOperator::Minus => binary_arithmetic_array!(*self, lhs, rhs, -),
             BinaryOperator::Multiply => binary_arithmetic_array!(*self, lhs, rhs, *),
             BinaryOperator::Divide => binary_arithmetic_array!(*self, lhs, rhs, /),
+            BinaryOperator::Rem => binary_rem_array!(*self, lhs, rhs),
         }
     }
 }

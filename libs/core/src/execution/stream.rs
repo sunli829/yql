@@ -93,54 +93,61 @@ mod tests {
 
     use futures_util::StreamExt;
 
-    use crate::array::{ArrayRef, DataType, Int64Array, TimestampArray};
-    use crate::dataset::{DataSet, Field, Schema, SchemaRef};
+    use crate::array::DataType;
+    use crate::dataset::{CsvOptions, DataSet, Field, Schema};
     use crate::dsl::*;
-    use crate::sources::test_harness::Provider;
+    use crate::sources::csv::{Options, Provider};
     use crate::{DataFrame, SourceProviderWrapper};
-
-    fn create_dataset(schema: SchemaRef, i: i64, with_time: bool) -> DataSet {
-        let mut columns = vec![
-            Arc::new((i * 10..(i + 1) * 10).collect::<Int64Array>()) as ArrayRef,
-            Arc::new(
-                (i * 10..(i + 1) * 10)
-                    .map(|x| x * 10)
-                    .collect::<Int64Array>(),
-            ),
-            Arc::new(
-                (i * 10..(i + 1) * 10)
-                    .map(|x| x * 1000)
-                    .collect::<TimestampArray>(),
-            ),
-        ];
-
-        if with_time {
-            columns.push(Arc::new(
-                (i * 10..(i + 1) * 10)
-                    .map(|x| x * 1000)
-                    .collect::<TimestampArray>(),
-            ));
-        }
-
-        DataSet::try_new(schema.clone(), columns).unwrap()
-    }
 
     fn create_source_provider() -> Provider {
         let schema = Arc::new(
             Schema::try_new(vec![
+                Field::new("time", DataType::Timestamp(None)),
                 Field::new("a", DataType::Int64),
-                Field::new("b", DataType::Int64),
-                Field::new("t", DataType::Timestamp(None)),
+                Field::new("b", DataType::String),
+                Field::new("c", DataType::String),
             ])
             .unwrap(),
         );
 
-        let mut datasets = Vec::new();
-        for i in 0..10 {
-            datasets.push(create_dataset(schema.clone(), i, false));
-        }
+        let data = r#"
+1622512140000,1,a,a
+1622512200000,2,b,a
+1622512260000,3,c,a
+1622512320000,4,d,a
+1622512380000,5,e,b
+1622512440000,6,f,b
+1622512500000,7,g,b
+1622512560000,8,h,b
+1622512620000,9,i,b
+1622512680000,10,j,b
+1622512740000,11,k,b
+1622512800000,12,l,b
+1622512860000,13,m,c
+1622512920000,14,n,c
+1622512980000,15,o,c
+1622513040000,16,p,c
+1622513100000,17,q,c
+1622513160000,18,r,c
+1622513220000,19,s,c
+1622513280000,20,t,c
+1622513340000,21,u,d
+1622513400000,22,v,d
+1622513460000,23,w,d
+1622513520000,24,x,d
+1622513580000,25,y,d
+1622513640000,26,z,d
+"#;
 
-        Provider::new(schema, datasets)
+        Provider::new_from_memory(
+            Options {
+                delimiter: b',',
+                has_header: false,
+                batch_size: 10,
+            },
+            schema,
+            data,
+        )
     }
 
     #[tokio::test]
@@ -149,22 +156,236 @@ mod tests {
         let df = DataFrame::new(
             Arc::new(SourceProviderWrapper(provider)),
             None,
-            Some(col("t")),
+            Some(col("time")),
             None,
         );
-        let mut stream = df.clone().into_stream(None).unwrap();
+        let output_schema = Arc::new(
+            Schema::try_new(vec![
+                Field::new("time", DataType::Timestamp(None)),
+                Field::new("a", DataType::Int64),
+                Field::new("b", DataType::String),
+                Field::new("c", DataType::String),
+                Field::new("@time", DataType::Timestamp(None)),
+            ])
+            .unwrap(),
+        );
 
+        let mut stream = df.clone().into_stream(None).unwrap();
         assert_eq!(
             stream.next().await.unwrap().unwrap(),
-            create_dataset(stream.schema(), 0, true)
+            DataSet::from_csv_slice(
+                output_schema.clone(),
+                CsvOptions::default(),
+                br#"
+1622512140000,1,a,a,1622512140000
+1622512200000,2,b,a,1622512200000
+1622512260000,3,c,a,1622512260000
+1622512320000,4,d,a,1622512320000
+1622512380000,5,e,b,1622512380000
+1622512440000,6,f,b,1622512440000
+1622512500000,7,g,b,1622512500000
+1622512560000,8,h,b,1622512560000
+1622512620000,9,i,b,1622512620000
+1622512680000,10,j,b,1622512680000
+"#,
+            )
+            .unwrap()
         );
 
         let state = stream.save_state().unwrap();
-
         let mut stream = df.clone().into_stream(Some(state)).unwrap();
         assert_eq!(
             stream.next().await.unwrap().unwrap(),
-            create_dataset(stream.schema(), 1, true)
+            DataSet::from_csv_slice(
+                output_schema.clone(),
+                CsvOptions::default(),
+                br#"
+1622512740000,11,k,b,1622512740000
+1622512800000,12,l,b,1622512800000
+1622512860000,13,m,c,1622512860000
+1622512920000,14,n,c,1622512920000
+1622512980000,15,o,c,1622512980000
+1622513040000,16,p,c,1622513040000
+1622513100000,17,q,c,1622513100000
+1622513160000,18,r,c,1622513160000
+1622513220000,19,s,c,1622513220000
+1622513280000,20,t,c,1622513280000
+"#,
+            )
+            .unwrap()
+        );
+
+        let state = stream.save_state().unwrap();
+        let mut stream = df.clone().into_stream(Some(state)).unwrap();
+        assert_eq!(
+            stream.next().await.unwrap().unwrap(),
+            DataSet::from_csv_slice(
+                output_schema,
+                CsvOptions::default(),
+                br#"
+1622513340000,21,u,d,1622513340000
+1622513400000,22,v,d,1622513400000
+1622513460000,23,w,d,1622513460000
+1622513520000,24,x,d,1622513520000
+1622513580000,25,y,d,1622513580000
+1622513640000,26,z,d,1622513640000
+"#,
+            )
+            .unwrap()
         );
     }
+
+    #[tokio::test]
+    async fn test_projection_stream() {
+        let provider = create_source_provider();
+        let df = DataFrame::new(
+            Arc::new(SourceProviderWrapper(provider)),
+            None,
+            Some(col("time")),
+            None,
+        )
+        .select(vec![(col("a") + value(88)).alias("a")]);
+        let output_schema =
+            Arc::new(Schema::try_new(vec![Field::new("a", DataType::Int64)]).unwrap());
+
+        let mut stream = df.clone().into_stream(None).unwrap();
+        assert_eq!(
+            stream.next().await.unwrap().unwrap(),
+            DataSet::from_csv_slice(
+                output_schema.clone(),
+                CsvOptions::default(),
+                br#"
+89,
+90,
+91,
+92,
+93,
+94,
+95,
+96,
+97,
+98,
+"#,
+            )
+            .unwrap()
+        );
+
+        let state = stream.save_state().unwrap();
+        let mut stream = df.clone().into_stream(Some(state)).unwrap();
+        assert_eq!(
+            stream.next().await.unwrap().unwrap(),
+            DataSet::from_csv_slice(
+                output_schema.clone(),
+                CsvOptions::default(),
+                br#"
+99,
+100,
+101,
+102,
+103,
+104,
+105,
+106,
+107,
+108,
+"#,
+            )
+            .unwrap()
+        );
+
+        let state = stream.save_state().unwrap();
+        let mut stream = df.clone().into_stream(Some(state)).unwrap();
+        assert_eq!(
+            stream.next().await.unwrap().unwrap(),
+            DataSet::from_csv_slice(
+                output_schema,
+                CsvOptions::default(),
+                br#"
+109,
+110,
+111,
+112,
+113,
+114,
+"#,
+            )
+            .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_filter_stream() {
+        let provider = create_source_provider();
+        let df = DataFrame::new(
+            Arc::new(SourceProviderWrapper(provider)),
+            None,
+            Some(col("time")),
+            None,
+        )
+        .filter((col("a") % value(2)).eq(value(0)));
+        let output_schema = Arc::new(
+            Schema::try_new(vec![
+                Field::new("time", DataType::Timestamp(None)),
+                Field::new("a", DataType::Int64),
+                Field::new("b", DataType::String),
+                Field::new("c", DataType::String),
+                Field::new("@time", DataType::Timestamp(None)),
+            ])
+            .unwrap(),
+        );
+
+        let mut stream = df.clone().into_stream(None).unwrap();
+        assert_eq!(
+            stream.next().await.unwrap().unwrap(),
+            DataSet::from_csv_slice(
+                output_schema.clone(),
+                CsvOptions::default(),
+                br#"
+1622512200000,2,b,a,1622512200000
+1622512320000,4,d,a,1622512320000
+1622512440000,6,f,b,1622512440000
+1622512560000,8,h,b,1622512560000
+1622512680000,10,j,b,1622512680000
+"#,
+            )
+            .unwrap()
+        );
+
+        let state = stream.save_state().unwrap();
+        let mut stream = df.clone().into_stream(Some(state)).unwrap();
+        assert_eq!(
+            stream.next().await.unwrap().unwrap(),
+            DataSet::from_csv_slice(
+                output_schema.clone(),
+                CsvOptions::default(),
+                br#"
+1622512800000,12,l,b,1622512800000
+1622512920000,14,n,c,1622512920000
+1622513040000,16,p,c,1622513040000
+1622513160000,18,r,c,1622513160000
+1622513280000,20,t,c,1622513280000
+"#,
+            )
+            .unwrap()
+        );
+
+        let state = stream.save_state().unwrap();
+        let mut stream = df.clone().into_stream(Some(state)).unwrap();
+        assert_eq!(
+            stream.next().await.unwrap().unwrap(),
+            DataSet::from_csv_slice(
+                output_schema,
+                CsvOptions::default(),
+                br#"
+1622513400000,22,v,d,1622513400000
+1622513520000,24,x,d,1622513520000
+1622513640000,26,z,d,1622513640000
+"#,
+            )
+            .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_aggregate_stream() {}
 }

@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, Neg, Not, Sub};
+use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
 
 use serde::{Deserialize, Serialize};
 
@@ -151,6 +151,18 @@ impl Div for Expr {
     fn div(self, rhs: Self) -> Self::Output {
         Expr::Binary {
             op: BinaryOperator::Divide,
+            lhs: Box::new(self),
+            rhs: Box::new(rhs),
+        }
+    }
+}
+
+impl Rem for Expr {
+    type Output = Expr;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        Expr::Binary {
+            op: BinaryOperator::Rem,
             lhs: Box::new(self),
             rhs: Box::new(rhs),
         }
