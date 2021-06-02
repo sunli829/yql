@@ -10,50 +10,203 @@ use crate::array::{
     PrimitiveType, StringArray,
 };
 
+macro_rules! check_overflow {
+    ($expr:expr) => {
+        match $expr {
+            Some(value) => Ok(value),
+            None => Err(anyhow::anyhow!("arithmetic overflowed")),
+        }
+    };
+}
+
 macro_rules! binary_arithmetic_array {
-    ($opcode:expr, $lhs:expr, $rhs:expr, $op:tt) => {
+    ($opcode:expr, $lhs:expr, $rhs:expr, $op:ident, $fop:tt) => {
         match ($lhs.data_type(), $rhs.data_type()) {
-            (DataType::Int8, DataType::Int8) => math_op::<Int8Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int8, DataType::Int16) => math_op::<Int8Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int8, DataType::Int32) => math_op::<Int8Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int8, DataType::Int64) => math_op::<Int8Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) $op b),
-            (DataType::Int8, DataType::Float32) => math_op::<Int8Type, Float32Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Int8, DataType::Float64) => math_op::<Int8Type, Float64Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op b),
+            (DataType::Int8, DataType::Int8) => {
+                math_op::<Int8Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).$op(b as i64))
+                })
+            }
+            (DataType::Int8, DataType::Int16) => {
+                math_op::<Int8Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).$op(b as i64))
+                })
+            }
+            (DataType::Int8, DataType::Int32) => {
+                math_op::<Int8Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).$op(b as i64))
+                })
+            }
+            (DataType::Int8, DataType::Int64) => {
+                math_op::<Int8Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).$op(b))
+                })
+            }
+            (DataType::Int8, DataType::Float32) => {
+                math_op::<Int8Type, Float32Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop (b as f64))
+                })
+            }
+            (DataType::Int8, DataType::Float64) => {
+                math_op::<Int8Type, Float64Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop b)
+                })
+            }
 
-            (DataType::Int16, DataType::Int8) => math_op::<Int16Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int16, DataType::Int16) => math_op::<Int16Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int16, DataType::Int32) => math_op::<Int16Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int16, DataType::Int64) => math_op::<Int16Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) $op b),
-            (DataType::Int16, DataType::Float32) => math_op::<Int16Type, Float32Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Int16, DataType::Float64) => math_op::<Int16Type, Float64Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op b),
+            (DataType::Int16, DataType::Int8) => {
+                math_op::<Int16Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).$op(b as i64))
+                })
+            }
+            (DataType::Int16, DataType::Int16) => {
+                math_op::<Int16Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).$op(b as i64))
+                })
+            }
+            (DataType::Int16, DataType::Int32) => {
+                math_op::<Int16Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).$op(b as i64))
+                })
+            }
+            (DataType::Int16, DataType::Int64) => {
+                math_op::<Int16Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).$op(b))
+                })
+            }
+            (DataType::Int16, DataType::Float32) => {
+                math_op::<Int16Type, Float32Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop (b as f64))
+                })
+            }
+            (DataType::Int16, DataType::Float64) => {
+                math_op::<Int16Type, Float64Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop b)
+                })
+            }
 
-            (DataType::Int32, DataType::Int8) => math_op::<Int32Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int32, DataType::Int16) => math_op::<Int32Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int32, DataType::Int32) => math_op::<Int32Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int32, DataType::Int64) => math_op::<Int32Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) $op b),
-            (DataType::Int32, DataType::Float32) => math_op::<Int32Type, Float32Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Int32, DataType::Float64) => math_op::<Int32Type, Float64Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op b),
+            (DataType::Int32, DataType::Int8) => {
+                math_op::<Int32Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).$op(b as i64))
+                })
+            }
+            (DataType::Int32, DataType::Int16) => {
+                math_op::<Int32Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).$op(b as i64))
+                })
+            }
+            (DataType::Int32, DataType::Int32) => {
+                math_op::<Int32Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).$op(b as i64))
+                })
+            }
+            (DataType::Int32, DataType::Int64) => {
+                math_op::<Int32Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).$op(b))
+                })
+            }
+            (DataType::Int32, DataType::Float32) => {
+                math_op::<Int32Type, Float32Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop (b as f64))
+                })
+            }
+            (DataType::Int32, DataType::Float64) => {
+                math_op::<Int32Type, Float64Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop b)
+                })
+            }
 
-            (DataType::Int64, DataType::Int8) => math_op::<Int64Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| a $op (b as i64)),
-            (DataType::Int64, DataType::Int16) => math_op::<Int64Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| a $op (b as i64)),
-            (DataType::Int64, DataType::Int32) => math_op::<Int64Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| a $op (b as i64)),
-            (DataType::Int64, DataType::Int64) => math_op::<Int64Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| a $op b),
-            (DataType::Int64, DataType::Float32) => math_op::<Int64Type, Float32Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Int64, DataType::Float64) => math_op::<Int64Type, Float64Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op b),
+            (DataType::Int64, DataType::Int8) => {
+                math_op::<Int64Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!(a.$op(b as i64))
+                })
+            }
+            (DataType::Int64, DataType::Int16) => {
+                math_op::<Int64Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!(a.$op(b as i64))
+                })
+            }
+            (DataType::Int64, DataType::Int32) => {
+                math_op::<Int64Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!(a.$op(b as i64))
+                })
+            }
+            (DataType::Int64, DataType::Int64) => {
+                math_op::<Int64Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!(a.$op(b))
+                })
+            }
+            (DataType::Int64, DataType::Float32) => {
+                math_op::<Int64Type, Float32Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop (b as f64))
+                })
+            }
+            (DataType::Int64, DataType::Float64) => {
+                math_op::<Int64Type, Float64Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop b)
+                })
+            }
 
-            (DataType::Float32, DataType::Int8) => math_op::<Float32Type, Int8Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Float32, DataType::Int16) => math_op::<Float32Type, Int16Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Float32, DataType::Int32) => math_op::<Float32Type, Int32Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Float32, DataType::Int64) => math_op::<Float32Type, Int64Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Float32, DataType::Float32) => math_op::<Float32Type, Float32Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Float32, DataType::Float64) => math_op::<Float32Type, Float64Type, Float64Type, _>($lhs, $rhs, |a, b| (a as f64) $op b),
+            (DataType::Float32, DataType::Int8) => {
+                math_op::<Float32Type, Int8Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop (b as f64))
+                })
+            }
+            (DataType::Float32, DataType::Int16) => {
+                math_op::<Float32Type, Int16Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop (b as f64))
+                })
+            }
+            (DataType::Float32, DataType::Int32) => {
+                math_op::<Float32Type, Int32Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop (b as f64))
+                })
+            }
+            (DataType::Float32, DataType::Int64) => {
+                math_op::<Float32Type, Int64Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop (b as f64))
+                })
+            }
+            (DataType::Float32, DataType::Float32) => {
+                math_op::<Float32Type, Float32Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop (b as f64))
+                })
+            }
+            (DataType::Float32, DataType::Float64) => {
+                math_op::<Float32Type, Float64Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok((a as f64) $fop (b))
+                })
+            }
 
-            (DataType::Float64, DataType::Int8) => math_op::<Float64Type, Int8Type, Float64Type, _>($lhs, $rhs, |a, b| a $op (b as f64)),
-            (DataType::Float64, DataType::Int16) => math_op::<Float64Type, Int16Type, Float64Type, _>($lhs, $rhs, |a, b| a $op (b as f64)),
-            (DataType::Float64, DataType::Int32) => math_op::<Float64Type, Int32Type, Float64Type, _>($lhs, $rhs, |a, b| a $op (b as f64)),
-            (DataType::Float64, DataType::Int64) => math_op::<Float64Type, Int64Type, Float64Type, _>($lhs, $rhs, |a, b| a $op (b as f64)),
-            (DataType::Float64, DataType::Float32) => math_op::<Float64Type, Float32Type, Float64Type, _>($lhs, $rhs, |a, b| a $op (b as f64)),
-            (DataType::Float64, DataType::Float64) => math_op::<Float64Type, Float64Type, Float64Type, _>($lhs, $rhs, |a, b| a $op b),
+            (DataType::Float64, DataType::Int8) => {
+                math_op::<Float64Type, Int8Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok(a $fop (b as f64))
+                })
+            }
+            (DataType::Float64, DataType::Int16) => {
+                math_op::<Float64Type, Int16Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok(a $fop (b as f64))
+                })
+            }
+            (DataType::Float64, DataType::Int32) => {
+                math_op::<Float64Type, Int32Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok(a $fop (b as f64))
+                })
+            }
+            (DataType::Float64, DataType::Int64) => {
+                math_op::<Float64Type, Int64Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok(a $fop (b as f64))
+                })
+            }
+            (DataType::Float64, DataType::Float32) => {
+                math_op::<Float64Type, Float32Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok(a $fop (b as f64))
+                })
+            }
+            (DataType::Float64, DataType::Float64) => {
+                math_op::<Float64Type, Float64Type, Float64Type, _>($lhs, $rhs, |a, b| {
+                    Ok(a $fop (b))
+                })
+            }
 
             _ => Err(binary_error($opcode, $lhs.data_type(), $rhs.data_type())),
         }
@@ -65,72 +218,86 @@ macro_rules! binary_rem_array {
         match ($lhs.data_type(), $rhs.data_type()) {
             (DataType::Int8, DataType::Int8) => {
                 math_op::<Int8Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| {
-                    (a as i64) % (b as i64)
+                    check_overflow!((a as i64).checked_rem(b as i64))
                 })
             }
             (DataType::Int8, DataType::Int16) => {
                 math_op::<Int8Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| {
-                    (a as i64) % (b as i64)
+                    check_overflow!((a as i64).checked_rem(b as i64))
                 })
             }
             (DataType::Int8, DataType::Int32) => {
                 math_op::<Int8Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| {
-                    (a as i64) % (b as i64)
+                    check_overflow!((a as i64).checked_rem(b as i64))
                 })
             }
             (DataType::Int8, DataType::Int64) => {
-                math_op::<Int8Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) % b)
+                math_op::<Int8Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).checked_rem(b))
+                })
             }
 
             (DataType::Int16, DataType::Int8) => {
                 math_op::<Int16Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| {
-                    (a as i64) % (b as i64)
+                    check_overflow!((a as i64).checked_rem(b as i64))
                 })
             }
             (DataType::Int16, DataType::Int16) => {
                 math_op::<Int16Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| {
-                    (a as i64) % (b as i64)
+                    check_overflow!((a as i64).checked_rem(b as i64))
                 })
             }
             (DataType::Int16, DataType::Int32) => {
                 math_op::<Int16Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| {
-                    (a as i64) % (b as i64)
+                    check_overflow!((a as i64).checked_rem(b as i64))
                 })
             }
             (DataType::Int16, DataType::Int64) => {
-                math_op::<Int16Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) % b)
+                math_op::<Int16Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).checked_rem(b))
+                })
             }
 
             (DataType::Int32, DataType::Int8) => {
                 math_op::<Int32Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| {
-                    (a as i64) % (b as i64)
+                    check_overflow!((a as i64).checked_rem(b as i64))
                 })
             }
             (DataType::Int32, DataType::Int16) => {
                 math_op::<Int32Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| {
-                    (a as i64) % (b as i64)
+                    check_overflow!((a as i64).checked_rem(b as i64))
                 })
             }
             (DataType::Int32, DataType::Int32) => {
                 math_op::<Int32Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| {
-                    (a as i64) % (b as i64)
+                    check_overflow!((a as i64).checked_rem(b as i64))
                 })
             }
             (DataType::Int32, DataType::Int64) => {
-                math_op::<Int32Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| (a as i64) % b)
+                math_op::<Int32Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!((a as i64).checked_rem(b))
+                })
             }
 
             (DataType::Int64, DataType::Int8) => {
-                math_op::<Int64Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| a % (b as i64))
+                math_op::<Int64Type, Int8Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!(a.checked_rem(b as i64))
+                })
             }
             (DataType::Int64, DataType::Int16) => {
-                math_op::<Int64Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| a % (b as i64))
+                math_op::<Int64Type, Int16Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!(a.checked_rem(b as i64))
+                })
             }
             (DataType::Int64, DataType::Int32) => {
-                math_op::<Int64Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| a % (b as i64))
+                math_op::<Int64Type, Int32Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!(a.checked_rem(b as i64))
+                })
             }
             (DataType::Int64, DataType::Int64) => {
-                math_op::<Int64Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| a % b)
+                math_op::<Int64Type, Int64Type, Int64Type, _>($lhs, $rhs, |a, b| {
+                    check_overflow!(a.checked_rem(b))
+                })
             }
 
             _ => Err(binary_error($opcode, $lhs.data_type(), $rhs.data_type())),
@@ -141,7 +308,28 @@ macro_rules! binary_rem_array {
 macro_rules! binary_equal_array {
     ($opcode:expr, $lhs:expr, $rhs:expr, $op:tt) => {
         match ($lhs.data_type(), $rhs.data_type()) {
-            (DataType::Boolean, DataType::Boolean) => math_op::<BooleanType, BooleanType, BooleanType, _>($lhs, $rhs, |a, b| a $op b),
+            (DataType::Int8, DataType::Int8) => math_op::<Int8Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int8, DataType::Int16) => math_op::<Int8Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int8, DataType::Int32) => math_op::<Int8Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int8, DataType::Int64) => math_op::<Int8Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op b)),
+
+            (DataType::Int16, DataType::Int8) => math_op::<Int16Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int16, DataType::Int16) => math_op::<Int16Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int16, DataType::Int32) => math_op::<Int16Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int16, DataType::Int64) => math_op::<Int16Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op b)),
+
+            (DataType::Int32, DataType::Int8) => math_op::<Int32Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int32, DataType::Int16) => math_op::<Int32Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int32, DataType::Int32) => math_op::<Int32Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int32, DataType::Int64) => math_op::<Int32Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op b)),
+
+            (DataType::Int64, DataType::Int8) => math_op::<Int64Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op (b as i64))),
+            (DataType::Int64, DataType::Int16) => math_op::<Int64Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op (b as i64))),
+            (DataType::Int64, DataType::Int32) => math_op::<Int64Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op (b as i64))),
+            (DataType::Int64, DataType::Int64) => math_op::<Int64Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op b)),
+
+            (DataType::Boolean, DataType::Boolean) => math_op::<BooleanType, BooleanType, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op b)),
+
             (DataType::String, DataType::String) => {
                 let a = $lhs.downcast_ref::<StringArray>();
                 let b = $rhs.downcast_ref::<StringArray>();
@@ -160,26 +348,6 @@ macro_rules! binary_equal_array {
                 }
                 Ok(Arc::new(builder.finish()))
             },
-
-            (DataType::Int8, DataType::Int8) => math_op::<Int8Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int8, DataType::Int16) => math_op::<Int8Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int8, DataType::Int32) => math_op::<Int8Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int8, DataType::Int64) => math_op::<Int8Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op b),
-
-            (DataType::Int16, DataType::Int8) => math_op::<Int16Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int16, DataType::Int16) => math_op::<Int16Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int16, DataType::Int32) => math_op::<Int16Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int16, DataType::Int64) => math_op::<Int16Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op b),
-
-            (DataType::Int32, DataType::Int8) => math_op::<Int32Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int32, DataType::Int16) => math_op::<Int32Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int32, DataType::Int32) => math_op::<Int32Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int32, DataType::Int64) => math_op::<Int32Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op b),
-
-            (DataType::Int64, DataType::Int8) => math_op::<Int64Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| a $op (b as i64)),
-            (DataType::Int64, DataType::Int16) => math_op::<Int64Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| a $op (b as i64)),
-            (DataType::Int64, DataType::Int32) => math_op::<Int64Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| a $op (b as i64)),
-            (DataType::Int64, DataType::Int64) => math_op::<Int64Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| a $op b),
 
             _ => Err(binary_error($opcode, $lhs.data_type(), $rhs.data_type())),
         }
@@ -202,47 +370,47 @@ macro_rules! binary_order_array {
                 Ok(Arc::new(builder.finish()))
             },
 
-            (DataType::Int8, DataType::Int8) => math_op::<Int8Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int8, DataType::Int16) => math_op::<Int8Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int8, DataType::Int32) => math_op::<Int8Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int8, DataType::Int64) => math_op::<Int8Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op b),
-            (DataType::Int8, DataType::Float32) => math_op::<Int8Type, Float32Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Int8, DataType::Float64) => math_op::<Int8Type, Float64Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op b),
+            (DataType::Int8, DataType::Int8) => math_op::<Int8Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int8, DataType::Int16) => math_op::<Int8Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int8, DataType::Int32) => math_op::<Int8Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int8, DataType::Int64) => math_op::<Int8Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op b)),
+            (DataType::Int8, DataType::Float32) => math_op::<Int8Type, Float32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op (b as f64))),
+            (DataType::Int8, DataType::Float64) => math_op::<Int8Type, Float64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op b)),
 
-            (DataType::Int16, DataType::Int8) => math_op::<Int16Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int16, DataType::Int16) => math_op::<Int16Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int16, DataType::Int32) => math_op::<Int16Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int16, DataType::Int64) => math_op::<Int16Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op b),
-            (DataType::Int16, DataType::Float32) => math_op::<Int16Type, Float32Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Int16, DataType::Float64) => math_op::<Int16Type, Float64Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op b),
+            (DataType::Int16, DataType::Int8) => math_op::<Int16Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int16, DataType::Int16) => math_op::<Int16Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int16, DataType::Int32) => math_op::<Int16Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int16, DataType::Int64) => math_op::<Int16Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op b)),
+            (DataType::Int16, DataType::Float32) => math_op::<Int16Type, Float32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op (b as f64))),
+            (DataType::Int16, DataType::Float64) => math_op::<Int16Type, Float64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op b)),
 
-            (DataType::Int32, DataType::Int8) => math_op::<Int32Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int32, DataType::Int16) => math_op::<Int32Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int32, DataType::Int32) => math_op::<Int32Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op (b as i64)),
-            (DataType::Int32, DataType::Int64) => math_op::<Int32Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| (a as i64) $op b),
-            (DataType::Int32, DataType::Float32) => math_op::<Int32Type, Float32Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Int32, DataType::Float64) => math_op::<Int32Type, Float64Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op b),
+            (DataType::Int32, DataType::Int8) => math_op::<Int32Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int32, DataType::Int16) => math_op::<Int32Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int32, DataType::Int32) => math_op::<Int32Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op (b as i64))),
+            (DataType::Int32, DataType::Int64) => math_op::<Int32Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as i64) $op b)),
+            (DataType::Int32, DataType::Float32) => math_op::<Int32Type, Float32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op (b as f64))),
+            (DataType::Int32, DataType::Float64) => math_op::<Int32Type, Float64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op b)),
 
-            (DataType::Int64, DataType::Int8) => math_op::<Int64Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| a $op (b as i64)),
-            (DataType::Int64, DataType::Int16) => math_op::<Int64Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| a $op (b as i64)),
-            (DataType::Int64, DataType::Int32) => math_op::<Int64Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| a $op (b as i64)),
-            (DataType::Int64, DataType::Int64) => math_op::<Int64Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| a $op b),
-            (DataType::Int64, DataType::Float32) => math_op::<Int64Type, Float32Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Int64, DataType::Float64) => math_op::<Int64Type, Float64Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op b),
+            (DataType::Int64, DataType::Int8) => math_op::<Int64Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op (b as i64))),
+            (DataType::Int64, DataType::Int16) => math_op::<Int64Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op (b as i64))),
+            (DataType::Int64, DataType::Int32) => math_op::<Int64Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op (b as i64))),
+            (DataType::Int64, DataType::Int64) => math_op::<Int64Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op b)),
+            (DataType::Int64, DataType::Float32) => math_op::<Int64Type, Float32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op (b as f64))),
+            (DataType::Int64, DataType::Float64) => math_op::<Int64Type, Float64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op b)),
 
-            (DataType::Float32, DataType::Int8) => math_op::<Float32Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Float32, DataType::Int16) => math_op::<Float32Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Float32, DataType::Int32) => math_op::<Float32Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Float32, DataType::Int64) => math_op::<Float32Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Float32, DataType::Float32) => math_op::<Float32Type, Float32Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op (b as f64)),
-            (DataType::Float32, DataType::Float64) => math_op::<Float32Type, Float64Type, BooleanType, _>($lhs, $rhs, |a, b| (a as f64) $op b),
+            (DataType::Float32, DataType::Int8) => math_op::<Float32Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op (b as f64))),
+            (DataType::Float32, DataType::Int16) => math_op::<Float32Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op (b as f64))),
+            (DataType::Float32, DataType::Int32) => math_op::<Float32Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op (b as f64))),
+            (DataType::Float32, DataType::Int64) => math_op::<Float32Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op (b as f64))),
+            (DataType::Float32, DataType::Float32) => math_op::<Float32Type, Float32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op (b as f64))),
+            (DataType::Float32, DataType::Float64) => math_op::<Float32Type, Float64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok((a as f64) $op b)),
 
-            (DataType::Float64, DataType::Int8) => math_op::<Float64Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| a $op (b as f64)),
-            (DataType::Float64, DataType::Int16) => math_op::<Float64Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| a $op (b as f64)),
-            (DataType::Float64, DataType::Int32) => math_op::<Float64Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| a $op (b as f64)),
-            (DataType::Float64, DataType::Int64) => math_op::<Float64Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| a $op (b as f64)),
-            (DataType::Float64, DataType::Float32) => math_op::<Float64Type, Float32Type, BooleanType, _>($lhs, $rhs, |a, b| a $op (b as f64)),
-            (DataType::Float64, DataType::Float64) => math_op::<Float64Type, Float64Type, BooleanType, _>($lhs, $rhs, |a, b| a $op b),
+            (DataType::Float64, DataType::Int8) => math_op::<Float64Type, Int8Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op (b as f64))),
+            (DataType::Float64, DataType::Int16) => math_op::<Float64Type, Int16Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op (b as f64))),
+            (DataType::Float64, DataType::Int32) => math_op::<Float64Type, Int32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op (b as f64))),
+            (DataType::Float64, DataType::Int64) => math_op::<Float64Type, Int64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op (b as f64))),
+            (DataType::Float64, DataType::Float32) => math_op::<Float64Type, Float32Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op (b as f64))),
+            (DataType::Float64, DataType::Float64) => math_op::<Float64Type, Float64Type, BooleanType, _>($lhs, $rhs, |a, b| Ok(a $op b)),
 
             _ => Err(binary_error($opcode, $lhs.data_type(), $rhs.data_type())),
         }
@@ -356,6 +524,8 @@ impl BinaryOperator {
                     Ok(DataType::Float64)
                 } else if left.is_integer() && right.is_integer() {
                     Ok(DataType::Int64)
+                } else if left.is_timestamp() && right.is_integer() {
+                    Ok(DataType::Timestamp(None))
                 } else {
                     Err(binary_error(*self, left, right))
                 }
@@ -385,10 +555,10 @@ impl BinaryOperator {
             BinaryOperator::LtEq => binary_order_array!(*self, lhs, rhs, <=),
             BinaryOperator::Gt => binary_order_array!(*self, lhs, rhs, >),
             BinaryOperator::GtEq => binary_order_array!(*self, lhs, rhs, >=),
-            BinaryOperator::Plus => binary_arithmetic_array!(*self, lhs, rhs, +),
-            BinaryOperator::Minus => binary_arithmetic_array!(*self, lhs, rhs, -),
-            BinaryOperator::Multiply => binary_arithmetic_array!(*self, lhs, rhs, *),
-            BinaryOperator::Divide => binary_arithmetic_array!(*self, lhs, rhs, /),
+            BinaryOperator::Plus => binary_arithmetic_array!(*self, lhs, rhs, checked_add, +),
+            BinaryOperator::Minus => binary_arithmetic_array!(*self, lhs, rhs, checked_sub, -),
+            BinaryOperator::Multiply => binary_arithmetic_array!(*self, lhs, rhs, checked_mul, *),
+            BinaryOperator::Divide => binary_arithmetic_array!(*self, lhs, rhs, checked_div, /),
             BinaryOperator::Rem => binary_rem_array!(*self, lhs, rhs),
         }
     }
@@ -409,7 +579,7 @@ where
     A: PrimitiveType,
     B: PrimitiveType,
     R: PrimitiveType,
-    F: Fn(A::Native, B::Native) -> R::Native,
+    F: Fn(A::Native, B::Native) -> Result<R::Native>,
 {
     let a = a.downcast_ref::<PrimitiveArray<A>>();
     let b = b.downcast_ref::<PrimitiveArray<B>>();
@@ -417,7 +587,7 @@ where
         return match (a_scalar, b_scalar) {
             (Some(a_scalar), Some(b_scalar)) => Ok(Arc::new(PrimitiveArray::<R>::new_scalar(
                 a.len(),
-                Some(f(a_scalar, b_scalar)),
+                Some(f(a_scalar, b_scalar)?),
             ))),
             _ => Ok(Arc::new(PrimitiveArray::<R>::new_scalar(a.len(), None))),
         };
@@ -425,7 +595,7 @@ where
     let mut builder = PrimitiveBuilder::<R>::with_capacity(a.len());
     for (a, b) in a.iter_opt().zip(b.iter_opt()) {
         match (a, b) {
-            (Some(a), Some(b)) => builder.append(f(a, b)),
+            (Some(a), Some(b)) => builder.append(f(a, b)?),
             _ => builder.append_null(),
         }
     }
