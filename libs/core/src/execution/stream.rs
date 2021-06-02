@@ -11,6 +11,7 @@ use crate::execution::execution_context::ExecutionContext;
 use crate::planner::logical_plan::LogicalPlan;
 use crate::planner::physical_plan::PhysicalPlan;
 use crate::ExecutionMetrics;
+use chrono::Utc;
 
 pub struct CreateStreamContext {
     pub ctx: Arc<ExecutionContext>,
@@ -32,6 +33,7 @@ pub struct DataStream {
     ctx: Arc<ExecutionContext>,
     input: BoxDataSetStream,
     schema: SchemaRef,
+    first: bool,
 }
 
 impl DataStream {
@@ -53,6 +55,7 @@ impl DataStream {
         };
 
         Ok(Self {
+            first: true,
             ctx: exec_ctx,
             schema: physical_plan.root.schema(),
             input: crate::execution::streams::create_stream(&mut create_ctx, physical_plan.root)?,
@@ -78,10 +81,21 @@ impl Stream for DataStream {
     type Item = Result<DataSet>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if self.first {
+            self.ctx
+                .update_metrics(|metrics| metrics.start_time = Some(Utc::now().timestamp_millis()));
+            self.first = false;
+        }
+
         match self.input.poll_next_unpin(cx) {
             Poll::Ready(Some(Ok(dataset))) => Poll::Ready(Some(Ok(dataset.dataset))),
             Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
-            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Ready(None) => {
+                self.ctx.update_metrics(|metrics| {
+                    metrics.end_time = Some(Utc::now().timestamp_millis())
+                });
+                Poll::Ready(None)
+            }
             Poll::Pending => Poll::Pending,
         }
     }
