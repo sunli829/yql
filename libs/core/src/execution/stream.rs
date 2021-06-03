@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use anyhow::{Context as _, Result};
+use chrono::Utc;
 use futures_util::stream::{Stream, StreamExt};
 
 use crate::dataset::{DataSet, SchemaRef};
@@ -11,7 +12,6 @@ use crate::execution::execution_context::ExecutionContext;
 use crate::planner::logical_plan::LogicalPlan;
 use crate::planner::physical_plan::PhysicalPlan;
 use crate::ExecutionMetrics;
-use chrono::Utc;
 
 pub struct CreateStreamContext {
     pub ctx: Arc<ExecutionContext>,

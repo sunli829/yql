@@ -9,9 +9,7 @@ use crate::expr::physical_expr::PhysicalExpr;
 use crate::expr::Expr;
 use crate::planner::logical_plan::{
     LogicalAggregatePlan, LogicalFilterPlan, LogicalPlan, LogicalProjectionPlan, LogicalSourcePlan,
-    Partitioning, RepartitionPlan,
 };
-use crate::planner::physical_plan::repartition::{PhysicalPartitioning, PhysicalRepartitionNode};
 use crate::planner::physical_plan::{
     PhysicalAggregateNode, PhysicalFilterNode, PhysicalNode, PhysicalPlan, PhysicalProjectionNode,
     PhysicalSourceNode, FIELD_TIME,
@@ -19,8 +17,6 @@ use crate::planner::physical_plan::{
 
 struct Context {
     id: usize,
-    node_count: usize,
-    source_count: usize,
 }
 
 impl Context {
@@ -33,13 +29,8 @@ impl Context {
 }
 
 fn to_physical(ctx: &mut Context, plan: LogicalPlan) -> Result<PhysicalNode> {
-    ctx.node_count += 1;
     match plan {
-        LogicalPlan::Source(source) => {
-            ctx.source_count += 1;
-            source_to_physical(ctx, source)
-        }
-        LogicalPlan::Repartition(repartition) => repartition_to_physical(ctx, repartition),
+        LogicalPlan::Source(source) => source_to_physical(ctx, source),
         LogicalPlan::Projection(projection) => projection_to_physical(ctx, projection),
         LogicalPlan::Filter(filter) => filter_to_physical(ctx, filter),
         LogicalPlan::Aggregate(aggregate) => aggregate_to_physical(ctx, aggregate),
@@ -71,34 +62,6 @@ fn source_to_physical(ctx: &mut Context, source: LogicalSourcePlan) -> Result<Ph
         time_expr: match source.time_expr {
             Some(expr) => Some(expr.into_physical(source_schema.clone())?),
             None => None,
-        },
-    }))
-}
-
-fn repartition_to_physical(
-    ctx: &mut Context,
-    repartition: RepartitionPlan,
-) -> Result<PhysicalNode> {
-    let input = to_physical(ctx, *repartition.input)?;
-    let schema = input.schema();
-    Ok(PhysicalNode::Repartition(PhysicalRepartitionNode {
-        input: Box::new(input),
-        schema: schema.clone(),
-        partitioning: match repartition.partitioning {
-            Partitioning::RoundRobin(n) => PhysicalPartitioning::RoundRobin(n),
-            Partitioning::Hash(exprs, n) => PhysicalPartitioning::Hash(
-                exprs
-                    .into_iter()
-                    .map(|expr| expr.into_physical(schema.clone()))
-                    .try_collect()?,
-                n,
-            ),
-            Partitioning::Group(exprs) => PhysicalPartitioning::Group(
-                exprs
-                    .into_iter()
-                    .map(|expr| expr.into_physical(schema.clone()))
-                    .try_collect()?,
-            ),
         },
     }))
 }
@@ -222,16 +185,8 @@ fn select_expr(
 
 impl PhysicalPlan {
     pub fn try_new(plan: LogicalPlan) -> Result<PhysicalPlan> {
-        let mut ctx = Context {
-            id: 0,
-            node_count: 0,
-            source_count: 0,
-        };
+        let mut ctx = Context { id: 0 };
         let root = to_physical(&mut ctx, plan)?;
-        Ok(PhysicalPlan {
-            root,
-            source_count: ctx.source_count,
-            node_count: ctx.node_count,
-        })
+        Ok(PhysicalPlan { root })
     }
 }
