@@ -185,7 +185,6 @@ impl Service {
                 schema: Arc::new(Schema::try_new(stmt.fields)?),
                 uri: stmt.uri,
                 time_expr: stmt.time,
-                watermark_expr: stmt.watermark,
             }))?;
 
         create_action_result_dataset("Create Source", true)

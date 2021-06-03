@@ -14,7 +14,6 @@ pub struct SourceDefinition {
     pub schema: SchemaRef,
     pub uri: String,
     pub time_expr: Option<Expr>,
-    pub watermark_expr: Option<Expr>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -28,4 +28,5 @@ pub struct Select {
     pub having_clause: Option<Expr>,
     pub group_clause: Option<GroupBy>,
     pub window: Option<Window>,
+    pub watermark: Option<Expr>,
 }

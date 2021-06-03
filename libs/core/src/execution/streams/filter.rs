@@ -8,9 +8,7 @@ use futures_util::StreamExt;
 
 use crate::array::{ArrayExt, BooleanArray};
 use crate::dataset::DataSet;
-use crate::execution::stream::{
-    BoxDataSetStream, CreateStreamContext, DataSetStream, DataSetWithWatermark,
-};
+use crate::execution::stream::{BoxDataSetStream, CreateStreamContext, DataSetStream};
 use crate::execution::streams::create_stream;
 use crate::expr::physical_expr::PhysicalExpr;
 use crate::planner::physical_plan::PhysicalFilterNode;
@@ -62,23 +60,18 @@ impl DataSetStream for FilterStream {
 }
 
 impl Stream for FilterStream {
-    type Item = Result<DataSetWithWatermark>;
+    type Item = Result<DataSet>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             match self.input.poll_next_unpin(cx) {
-                Poll::Ready(Some(Ok(DataSetWithWatermark { watermark, dataset }))) => {
-                    match self.process_dataset(&dataset) {
-                        Ok(new_dataset) if !new_dataset.is_empty() => {
-                            return Poll::Ready(Some(Ok(DataSetWithWatermark {
-                                watermark,
-                                dataset: new_dataset,
-                            })));
-                        }
-                        Ok(_) => {}
-                        Err(err) => return Poll::Ready(Some(Err(err))),
+                Poll::Ready(Some(Ok(dataset))) => match self.process_dataset(&dataset) {
+                    Ok(new_dataset) if !new_dataset.is_empty() => {
+                        return Poll::Ready(Some(Ok(new_dataset)));
                     }
-                }
+                    Ok(_) => {}
+                    Err(err) => return Poll::Ready(Some(Err(err))),
+                },
                 Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(err))),
                 Poll::Ready(None) => return Poll::Ready(None),
                 Poll::Pending => return Poll::Pending,

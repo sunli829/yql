@@ -19,13 +19,11 @@ impl DataFrame {
         source_provider: SourceProvider,
         qualifier: Option<String>,
         time_expr: Option<Expr>,
-        watermark_expr: Option<Expr>,
     ) -> Self {
         Self(LogicalPlan::Source(LogicalSourcePlan {
             qualifier,
             source_provider,
             time_expr,
-            watermark_expr,
         }))
     }
 
@@ -51,11 +49,18 @@ impl DataFrame {
         }))
     }
 
-    pub fn aggregate(self, group_exprs: Vec<Expr>, aggr_exprs: Vec<Expr>, window: Window) -> Self {
+    pub fn aggregate(
+        self,
+        group_exprs: Vec<Expr>,
+        aggr_exprs: Vec<Expr>,
+        window: Window,
+        watermark_expr: Option<Expr>,
+    ) -> Self {
         Self(LogicalPlan::Aggregate(LogicalAggregatePlan {
             group_exprs,
             aggr_exprs,
             window,
+            watermark_expr,
             input: Box::new(self.0),
         }))
     }

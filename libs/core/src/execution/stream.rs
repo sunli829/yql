@@ -18,12 +18,7 @@ pub struct CreateStreamContext {
     pub prev_state: HashMap<usize, Vec<u8>>,
 }
 
-pub struct DataSetWithWatermark {
-    pub watermark: Option<i64>,
-    pub dataset: DataSet,
-}
-
-pub trait DataSetStream: Stream<Item = Result<DataSetWithWatermark>> {
+pub trait DataSetStream: Stream<Item = Result<DataSet>> {
     fn save_state(&self, state: &mut HashMap<usize, Vec<u8>>) -> Result<()>;
 }
 
@@ -88,7 +83,7 @@ impl Stream for DataStream {
         }
 
         match self.input.poll_next_unpin(cx) {
-            Poll::Ready(Some(Ok(dataset))) => Poll::Ready(Some(Ok(dataset.dataset))),
+            Poll::Ready(Some(Ok(dataset))) => Poll::Ready(Some(Ok(dataset))),
             Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
             Poll::Ready(None) => {
                 self.ctx.update_metrics(|metrics| {
@@ -171,7 +166,6 @@ mod tests {
             Arc::new(SourceProviderWrapper(provider)),
             None,
             Some(col("time")),
-            None,
         );
         let output_schema = Arc::new(
             Schema::try_new(vec![
@@ -258,7 +252,6 @@ mod tests {
             Arc::new(SourceProviderWrapper(provider)),
             None,
             Some(col("time")),
-            None,
         )
         .select(vec![(col("a") + value(88)).alias("a")]);
         let output_schema =
@@ -338,7 +331,6 @@ mod tests {
             Arc::new(SourceProviderWrapper(provider)),
             None,
             Some(col("time")),
-            None,
         )
         .filter((col("a") % value(2)).eq(value(0)));
         let output_schema = Arc::new(
@@ -413,7 +405,6 @@ mod tests {
             Arc::new(SourceProviderWrapper(provider)),
             None,
             Some(col("time")),
-            None,
         )
         .aggregate(
             vec![col("c")],
@@ -421,6 +412,7 @@ mod tests {
             Window::Fixed {
                 length: 1000 * 60 * 60,
             },
+            None,
         );
         let output_schema = Arc::new(
             Schema::try_new(vec![

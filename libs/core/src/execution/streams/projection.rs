@@ -7,9 +7,7 @@ use futures_util::{Stream, StreamExt};
 use itertools::Itertools;
 
 use crate::dataset::{DataSet, SchemaRef};
-use crate::execution::stream::{
-    BoxDataSetStream, CreateStreamContext, DataSetStream, DataSetWithWatermark,
-};
+use crate::execution::stream::{BoxDataSetStream, CreateStreamContext, DataSetStream};
 use crate::execution::streams::create_stream;
 use crate::expr::physical_expr::PhysicalExpr;
 use crate::planner::physical_plan::PhysicalProjectionNode;
@@ -78,19 +76,14 @@ impl DataSetStream for ProjectionStream {
 }
 
 impl Stream for ProjectionStream {
-    type Item = Result<DataSetWithWatermark>;
+    type Item = Result<DataSet>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         match self.input.poll_next_unpin(cx) {
-            Poll::Ready(Some(Ok(DataSetWithWatermark { watermark, dataset }))) => {
-                match self.process_dataset(&dataset) {
-                    Ok(new_dataset) => Poll::Ready(Some(Ok(DataSetWithWatermark {
-                        watermark,
-                        dataset: new_dataset,
-                    }))),
-                    Err(err) => Poll::Ready(Some(Err(err))),
-                }
-            }
+            Poll::Ready(Some(Ok(dataset))) => match self.process_dataset(&dataset) {
+                Ok(new_dataset) => Poll::Ready(Some(Ok(new_dataset))),
+                Err(err) => Poll::Ready(Some(Err(err))),
+            },
             Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,

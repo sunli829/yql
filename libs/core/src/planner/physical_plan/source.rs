@@ -8,5 +8,4 @@ pub struct PhysicalSourceNode {
     pub schema: SchemaRef,
     pub source_provider: SourceProvider,
     pub time_expr: Option<PhysicalExpr>,
-    pub watermark_expr: Option<PhysicalExpr>,
 }

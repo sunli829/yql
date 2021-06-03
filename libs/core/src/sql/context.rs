@@ -6,7 +6,6 @@ use crate::SourceProvider;
 pub struct SqlSourceProvider {
     pub source_provider: SourceProvider,
     pub time_expr: Option<Expr>,
-    pub watermark_expr: Option<Expr>,
 }
 
 pub trait SqlContext {

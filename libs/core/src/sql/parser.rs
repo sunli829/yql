@@ -402,6 +402,14 @@ pub fn select(input: &str) -> IResult<&str, Select> {
     let having_clause = map(tuple((tag_no_case("having"), sp, expr)), |(_, _, expr)| {
         expr
     });
+    let watermark_by = map(
+        tuple((tag_no_case("watermark"), sp, tag_no_case("by"), sp, expr)),
+        |(_, _, _, _, expr)| expr,
+    );
+    let window = map(
+        tuple((window, sp, opt(watermark_by))),
+        |(window, _, watermark)| (window, watermark),
+    );
 
     context(
         "select",
@@ -416,13 +424,27 @@ pub fn select(input: &str) -> IResult<&str, Select> {
                 opt(delimited(sp, having_clause, sp)),
                 opt(delimited(sp, window, sp)),
             )),
-            |(_, projection, _, source, where_clause, group_by, having_clause, window)| Select {
-                projection,
-                source,
-                where_clause,
-                having_clause,
-                group_clause: group_by,
-                window,
+            |(_, projection, _, source, where_clause, group_by, having_clause, window)| {
+                let mut select = Select {
+                    projection,
+                    source,
+                    where_clause,
+                    having_clause,
+                    group_clause: group_by,
+                    window: None,
+                    watermark: None,
+                };
+                match window {
+                    Some((window, Some(watermark))) => {
+                        select.window = Some(window);
+                        select.watermark = Some(watermark);
+                    }
+                    Some((window, None)) => {
+                        select.window = Some(window);
+                    }
+                    None => {}
+                }
+                select
             },
         ),
     )(input)
@@ -740,6 +762,7 @@ mod tests {
                     having_clause: None,
                     group_clause: None,
                     window: None,
+                    watermark: None
                 },
             )),
         );
@@ -772,7 +795,8 @@ mod tests {
                     ),
                     having_clause: None,
                     group_clause: None,
-                    window: None
+                    window: None,
+                    watermark: None
                 },
             )),
         );
@@ -812,7 +836,46 @@ mod tests {
                     }),
                     window: Some(Window::Fixed {
                         length: 5 * 1000 * 60
-                    })
+                    }),
+                    watermark: None,
+                },
+            )),
+        );
+
+        assert_eq!(
+            select(r#"select a, b from t group by b window fixed(5m) watermark by time"#),
+            Ok((
+                "",
+                Select {
+                    projection: vec![
+                        Expr::Column {
+                            qualifier: None,
+                            name: "a".to_string()
+                        },
+                        Expr::Column {
+                            qualifier: None,
+                            name: "b".to_string()
+                        },
+                    ],
+                    source: Source {
+                        from: SourceFrom::Named("t".to_string()),
+                        alias: None
+                    },
+                    where_clause: None,
+                    having_clause: None,
+                    group_clause: Some(GroupBy {
+                        exprs: vec![Expr::Column {
+                            qualifier: None,
+                            name: "b".to_string()
+                        }]
+                    }),
+                    window: Some(Window::Fixed {
+                        length: 5 * 1000 * 60
+                    }),
+                    watermark: Some(Expr::Column {
+                        qualifier: None,
+                        name: "time".to_string()
+                    }),
                 },
             )),
         );

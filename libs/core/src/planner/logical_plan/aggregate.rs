@@ -7,5 +7,6 @@ pub struct LogicalAggregatePlan {
     pub input: Box<LogicalPlan>,
     pub group_exprs: Vec<Expr>,
     pub aggr_exprs: Vec<Expr>,
+    pub watermark_expr: Option<Expr>,
     pub window: Window,
 }

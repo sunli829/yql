@@ -72,10 +72,6 @@ fn source_to_physical(ctx: &mut Context, source: LogicalSourcePlan) -> Result<Ph
             Some(expr) => Some(expr.into_physical(source_schema.clone())?),
             None => None,
         },
-        watermark_expr: match source.watermark_expr {
-            Some(expr) => Some(expr.into_physical(source_schema)?),
-            None => None,
-        },
     }))
 }
 
@@ -159,6 +155,10 @@ fn aggregate_to_physical(
         input.schema(),
         vec![Field::new(FIELD_TIME, DataType::Timestamp(timezone))],
     )?;
+    let watermark_expr = match aggregate.watermark_expr {
+        Some(expr) => Some(expr.into_physical(input.schema())?),
+        None => None,
+    };
 
     Ok(PhysicalNode::Aggregate(PhysicalAggregateNode {
         id: ctx.take_id(),
@@ -167,6 +167,7 @@ fn aggregate_to_physical(
         aggr_exprs,
         window: aggregate.window,
         time_idx,
+        watermark_expr,
         input: Box::new(input),
     }))
 }

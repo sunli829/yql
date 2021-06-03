@@ -26,7 +26,6 @@ pub struct StmtCreateSource {
     pub uri: String,
     pub fields: Vec<Field>,
     pub time: Option<Expr>,
-    pub watermark: Option<Expr>,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -146,10 +145,6 @@ fn stmt_create_source(input: &str) -> IResult<&str, StmtCreateSource> {
         tuple((tag_no_case("time"), sp, tag_no_case("by"), sp, expr)),
         |(_, _, _, _, expr)| expr,
     );
-    let watermark_by = map(
-        tuple((tag_no_case("watermark"), sp, tag_no_case("by"), sp, expr)),
-        |(_, _, _, _, expr)| expr,
-    );
 
     context(
         "stmt_create_source",
@@ -171,14 +166,12 @@ fn stmt_create_source(input: &str) -> IResult<&str, StmtCreateSource> {
                 sp,
                 string,
                 opt(delimited(sp, time_by, sp)),
-                opt(delimited(sp, watermark_by, sp)),
             )),
-            |(_, _, _, _, name, _, fields, _, _, _, uri, time_by, watermark_by)| StmtCreateSource {
+            |(_, _, _, _, name, _, fields, _, _, _, uri, time_by)| StmtCreateSource {
                 name,
                 uri,
                 fields,
                 time: time_by,
-                watermark: watermark_by,
             },
         ),
     )(input)
@@ -398,7 +391,6 @@ mod tests {
                         Field::new("b", DataType::Int16),
                     ],
                     time: None,
-                    watermark: None
                 }
             ))
         );
@@ -412,7 +404,7 @@ mod tests {
             t2 timestamp
         ) with "csv:///test"
         time by t
-        watermark by t2"#
+        "#
             ),
             Ok((
                 "",
@@ -428,10 +420,6 @@ mod tests {
                     time: Some(Expr::Column {
                         qualifier: None,
                         name: "t".to_string()
-                    }),
-                    watermark: Some(Expr::Column {
-                        qualifier: None,
-                        name: "t2".to_string()
                     }),
                 }
             ))
@@ -464,7 +452,8 @@ mod tests {
                         where_clause: None,
                         having_clause: None,
                         group_clause: None,
-                        window: None
+                        window: None,
+                        watermark: None
                     },
                     to: "d".to_string()
                 }
@@ -495,7 +484,8 @@ mod tests {
                         where_clause: None,
                         having_clause: None,
                         group_clause: None,
-                        window: None
+                        window: None,
+                        watermark: None
                     },
                     to: "d".to_string()
                 }

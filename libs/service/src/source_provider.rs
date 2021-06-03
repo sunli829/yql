@@ -23,7 +23,6 @@ pub fn create_source_provider(definition: &SourceDefinition) -> Result<SqlSource
             return Ok(SqlSourceProvider {
                 source_provider: Arc::new(SourceProviderWrapper(source_provider)),
                 time_expr: definition.time_expr.clone(),
-                watermark_expr: definition.watermark_expr.clone(),
             });
         }
     }

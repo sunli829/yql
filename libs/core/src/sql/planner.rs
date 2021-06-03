@@ -22,17 +22,17 @@ pub fn create_data_frame(ctx: &dyn SqlContext, select: Select) -> Result<DataFra
         df = df.filter(condition);
     }
 
-    match (select.group_clause, select.window) {
-        (Some(group_by), Some(window)) => {
-            df = df.aggregate(group_by.exprs, select.projection, window);
+    match (select.group_clause, select.window, select.watermark) {
+        (Some(group_by), Some(window), watermark) => {
+            df = df.aggregate(group_by.exprs, select.projection, window, watermark);
         }
-        (None, Some(window)) => {
-            df = df.aggregate(vec![], select.projection, window);
+        (None, Some(window), watermark) => {
+            df = df.aggregate(vec![], select.projection, window, watermark);
         }
-        (Some(_), None) => {
+        (Some(_), None, _) => {
             anyhow::bail!("the window clause is missing.");
         }
-        (None, None) => {
+        (None, None, _) => {
             df = df.select(select.projection);
         }
     }
@@ -54,7 +54,6 @@ fn create_source(ctx: &dyn SqlContext, source: Source) -> Result<DataFrame> {
                 provider.source_provider,
                 source.alias,
                 provider.time_expr,
-                provider.watermark_expr,
             ))
         }
         SourceFrom::SubQuery(select) => create_data_frame(ctx, *select),
