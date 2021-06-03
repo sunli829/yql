@@ -3,6 +3,7 @@ use crate::expr::physical_expr::PhysicalExpr;
 use crate::planner::physical_plan::PhysicalNode;
 use crate::planner::window::Window;
 
+#[derive(Clone)]
 pub struct PhysicalAggregateNode {
     pub id: usize,
     pub schema: SchemaRef,

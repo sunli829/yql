@@ -9,7 +9,9 @@ use crate::expr::physical_expr::PhysicalExpr;
 use crate::expr::Expr;
 use crate::planner::logical_plan::{
     LogicalAggregatePlan, LogicalFilterPlan, LogicalPlan, LogicalProjectionPlan, LogicalSourcePlan,
+    Partitioning, RepartitionPlan,
 };
+use crate::planner::physical_plan::repartition::{PhysicalPartitioning, PhysicalRepartitionNode};
 use crate::planner::physical_plan::{
     PhysicalAggregateNode, PhysicalFilterNode, PhysicalNode, PhysicalPlan, PhysicalProjectionNode,
     PhysicalSourceNode, FIELD_TIME,
@@ -37,6 +39,7 @@ fn to_physical(ctx: &mut Context, plan: LogicalPlan) -> Result<PhysicalNode> {
             ctx.source_count += 1;
             source_to_physical(ctx, source)
         }
+        LogicalPlan::Repartition(repartition) => repartition_to_physical(ctx, repartition),
         LogicalPlan::Projection(projection) => projection_to_physical(ctx, projection),
         LogicalPlan::Filter(filter) => filter_to_physical(ctx, filter),
         LogicalPlan::Aggregate(aggregate) => aggregate_to_physical(ctx, aggregate),
@@ -72,6 +75,34 @@ fn source_to_physical(ctx: &mut Context, source: LogicalSourcePlan) -> Result<Ph
         watermark_expr: match source.watermark_expr {
             Some(expr) => Some(expr.into_physical(source_schema)?),
             None => None,
+        },
+    }))
+}
+
+fn repartition_to_physical(
+    ctx: &mut Context,
+    repartition: RepartitionPlan,
+) -> Result<PhysicalNode> {
+    let input = to_physical(ctx, *repartition.input)?;
+    let schema = input.schema();
+    Ok(PhysicalNode::Repartition(PhysicalRepartitionNode {
+        input: Box::new(input),
+        schema: schema.clone(),
+        partitioning: match repartition.partitioning {
+            Partitioning::RoundRobin(n) => PhysicalPartitioning::RoundRobin(n),
+            Partitioning::Hash(exprs, n) => PhysicalPartitioning::Hash(
+                exprs
+                    .into_iter()
+                    .map(|expr| expr.into_physical(schema.clone()))
+                    .try_collect()?,
+                n,
+            ),
+            Partitioning::Group(exprs) => PhysicalPartitioning::Group(
+                exprs
+                    .into_iter()
+                    .map(|expr| expr.into_physical(schema.clone()))
+                    .try_collect()?,
+            ),
         },
     }))
 }

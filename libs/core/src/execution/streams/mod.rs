@@ -1,6 +1,7 @@
 mod aggregate;
 mod filter;
 mod projection;
+mod repartition;
 mod source;
 
 use anyhow::Result;
@@ -14,6 +15,9 @@ pub fn create_stream(
 ) -> Result<BoxDataSetStream> {
     match node {
         PhysicalNode::Source(source) => source::create_source_stream(create_ctx, source),
+        PhysicalNode::Repartition(repartition) => {
+            repartition::create_repartition_stream(create_ctx, repartition)
+        }
         PhysicalNode::Projection(projection) => {
             projection::create_projection_stream(create_ctx, projection)
         }
