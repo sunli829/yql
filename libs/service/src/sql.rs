@@ -123,6 +123,7 @@ fn data_type(input: &str) -> IResult<&str, DataType> {
             value(DataType::Float32, tag_no_case("float32")),
             value(DataType::Float64, tag_no_case("float64")),
             value(DataType::Boolean, tag_no_case("boolean")),
+            value(DataType::String, tag_no_case("string")),
             map(
                 tuple((
                     tag_no_case("timestamp"),
