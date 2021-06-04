@@ -159,7 +159,7 @@ pub enum PrimitiveArray<T: PrimitiveType> {
 impl<T: PrimitiveType> Debug for PrimitiveArray<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut ls = f.debug_list();
-        for value in self.iter() {
+        for value in self.iter_opt() {
             ls.entry(&value);
         }
         ls.finish()

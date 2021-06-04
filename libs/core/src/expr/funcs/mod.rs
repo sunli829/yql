@@ -24,7 +24,7 @@ const FUNCS: &[Function] = &[
     AVG, SUM, COUNT, MIN, MAX, FIRST, LAST,
     
     // string
-    CHR, CONCAT,
+    CHR, CONCAT, CONCAT_WS, ENCODE, INSTR, LCASE, LEN, LPAD, REPLACE, RPAD, SUBSTRING, TRIM, UCASE,
     
     // f.ref
     F_ALL, F_ANY, F_BARSLAST, F_BARSSINCE, F_COUNT, F_DMA, F_EMA, F_FILTER, F_HHV, F_LLV, 

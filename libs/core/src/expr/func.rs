@@ -71,6 +71,14 @@ impl FunctionType {
             FunctionType::Stateful(f) => f(),
         }
     }
+
+    #[cfg(test)]
+    pub fn call_stateless_fun(&self, args: &[ArrayRef]) -> Result<ArrayRef> {
+        match self {
+            FunctionType::Stateless(f) => f(args),
+            FunctionType::Stateful(_) => panic!("not a stateless function!"),
+        }
+    }
 }
 
 pub struct Function {

@@ -28,3 +28,5 @@ nom = "6.1.2"
 rdkafka = { version = "0.26.0", features = ["cmake-build"] }
 indexmap = "1.6.2"
 ahash = "0.7.4"
+hex = "0.4.3"
+base64 = "0.13.0"

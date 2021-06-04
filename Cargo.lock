@@ -609,6 +609,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
 name = "http"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1953,12 +1959,14 @@ dependencies = [
  "anyhow",
  "async-stream",
  "async-trait",
+ "base64",
  "bincode",
  "chrono",
  "chrono-tz",
  "derive_more",
  "dyn-clone",
  "futures-util",
+ "hex",
  "indexmap",
  "itertools 0.10.0",
  "nom 6.1.2",

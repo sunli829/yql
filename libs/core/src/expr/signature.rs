@@ -75,6 +75,8 @@ impl Signature {
     }
 
     pub fn data_types(&self, current_types: &[DataType]) -> Result<Vec<DataType>> {
+        anyhow::ensure!(current_types.len() > 0, "requires at least one argument.");
+
         let valid_types = self.get_valid_types(current_types)?;
 
         if valid_types
