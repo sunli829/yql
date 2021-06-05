@@ -3,6 +3,7 @@ mod f_logic;
 mod f_ref;
 mod f_stat;
 mod math;
+mod nulls;
 mod string;
 mod utils;
 
@@ -11,6 +12,7 @@ use f_logic::*;
 use f_ref::*;
 use f_stat::*;
 use math::*;
+use nulls::*;
 use string::*;
 
 use crate::expr::func::Function;
@@ -25,6 +27,9 @@ const FUNCS: &[Function] = &[
     
     // string
     CHR, CONCAT, CONCAT_WS, ENCODE, INSTR, LCASE, LEN, LPAD, REPLACE, RPAD, SUBSTRING, TRIM, UCASE,
+    
+    // nulls
+    COALESCE, IFNULL,
     
     // f.ref
     F_ALL, F_ANY, F_BARSLAST, F_BARSSINCE, F_COUNT, F_DMA, F_EMA, F_FILTER, F_HHV, F_LLV, 

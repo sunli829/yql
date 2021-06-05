@@ -441,7 +441,7 @@ pub const SUBSTRING: Function = Function {
         for ((value, pos), length) in array.iter_opt().zip(pos.iter_opt()).zip(length) {
             match (value, pos, length) {
                 (Some(value), Some(pos), Some(length)) => {
-                    if pos < 0 || length < 0 {
+                    if length < 0 {
                         builder.append_null();
                         continue;
                     }
@@ -452,10 +452,6 @@ pub const SUBSTRING: Function = Function {
                     }
                 }
                 (Some(value), Some(pos), None) => {
-                    if pos < 0 {
-                        builder.append_null();
-                        continue;
-                    }
                     if (pos as usize) <= value.len() {
                         builder.append(&value[pos as usize..]);
                     } else {
@@ -1099,6 +1095,155 @@ mod tests {
                     Arc::new(Int64Array::new_scalar(1, Some(6))),
                     Arc::new(StringArray::new_scalar(1, None::<&str>))
                 ])
+                .unwrap(),
+            &StringArray::new_scalar(1, None::<&str>) as &dyn Array
+        );
+    }
+
+    #[test]
+    fn test_substring() {
+        assert_eq!(
+            &*SUBSTRING
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcdef"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(0))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("abcdef")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*SUBSTRING
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcdef"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(3))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("def")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*SUBSTRING
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcdef"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(6))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*SUBSTRING
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcdef"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(0))),
+                    Arc::new(Int64Array::new_scalar(1, Some(3))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("abc")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*SUBSTRING
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcdef"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(3))),
+                    Arc::new(Int64Array::new_scalar(1, Some(3))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("def")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*SUBSTRING
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcdef"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(3))),
+                    Arc::new(Int64Array::new_scalar(1, Some(0))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*SUBSTRING
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcdef"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(6))),
+                    Arc::new(Int64Array::new_scalar(1, Some(1))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, None::<&str>) as &dyn Array
+        );
+
+        assert_eq!(
+            &*SUBSTRING
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcdef"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(3))),
+                    Arc::new(Int64Array::new_scalar(1, Some(4))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, None::<&str>) as &dyn Array
+        );
+
+        assert_eq!(
+            &*SUBSTRING
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcdef"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(0))),
+                    Arc::new(Int64Array::new_scalar(1, Some(8))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, None::<&str>) as &dyn Array
+        );
+
+        assert_eq!(
+            &*SUBSTRING
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, None::<&str>)),
+                    Arc::new(Int64Array::new_scalar(1, Some(0))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, None::<&str>) as &dyn Array
+        );
+    }
+
+    #[test]
+    fn test_term() {
+        assert_eq!(
+            &*TRIM
+                .function_type
+                .call_stateless_fun(&[Arc::new(StringArray::new_scalar(1, Some("  abc     "))),])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("abc")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*TRIM
+                .function_type
+                .call_stateless_fun(&[Arc::new(StringArray::new_scalar(
+                    1,
+                    Some("\t abc \t\t    ")
+                )),])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("abc")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*TRIM
+                .function_type
+                .call_stateless_fun(&[Arc::new(StringArray::new_scalar(1, None::<&str>)),])
                 .unwrap(),
             &StringArray::new_scalar(1, None::<&str>) as &dyn Array
         );
