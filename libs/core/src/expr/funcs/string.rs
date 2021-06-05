@@ -948,4 +948,7 @@ mod tests {
             &Int64Array::new_scalar(1, None) as &dyn Array
         );
     }
+
+    #[test]
+    fn test_lpad() {}
 }

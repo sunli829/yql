@@ -14,14 +14,10 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Install libsqlite3-dev
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsqlite3-dev
       - name: Run cargo-tarpaulin
         uses: actions-rs/tarpaulin@v0.1
         with:
-          version: '0.14.3'
+          version: '0.15.0'
           args: --out Xml --all --all-features
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v1.0.2
