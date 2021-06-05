@@ -396,21 +396,22 @@ pub const RPAD: Function = Function {
         {
             match (value, length, padding) {
                 (Some(value), Some(length), Some(padding))
-                    if length >= 0 && !padding.is_empty() && (length as usize) > value.len() =>
+                    if length >= 0 && !padding.is_empty() =>
                 {
-                    let times_padding = (length as usize - value.len()) / padding.len();
-                    let remaining_padding = (length as usize - value.len()) % padding.len();
-                    let mut s = String::new();
+                    if (length as usize) > value.len() {
+                        let times_padding = (length as usize - value.len()) / padding.len();
+                        let remaining_padding = (length as usize - value.len()) % padding.len();
+                        let mut s = String::new();
 
-                    for _ in 0..times_padding {
-                        s.push_str(padding);
+                        s.push_str(value);
+                        for _ in 0..times_padding {
+                            s.push_str(padding);
+                        }
+                        s.push_str(&padding[..remaining_padding]);
+                        builder.append(&s);
+                    } else {
+                        builder.append(&value[..length as usize]);
                     }
-                    s.push_str(value);
-                    s.push_str(&padding[..remaining_padding]);
-                    builder.append(&s);
-                }
-                (Some(value), Some(length), _) => {
-                    builder.append(&value[..length as usize]);
                 }
                 _ => builder.append_null(),
             }
@@ -1002,6 +1003,96 @@ mod tests {
 
         assert_eq!(
             &*LPAD
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abc"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(6))),
+                    Arc::new(StringArray::new_scalar(1, None::<&str>))
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, None::<&str>) as &dyn Array
+        );
+    }
+
+    #[test]
+    fn test_replace() {
+        assert_eq!(
+            &*REPLACE
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
+                    Arc::new(StringArray::new_scalar(1, Some("bc"))),
+                    Arc::new(StringArray::new_scalar(1, Some("A")))
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("aAaA")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*REPLACE
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, None::<&str>)),
+                    Arc::new(StringArray::new_scalar(1, Some("bc"))),
+                    Arc::new(StringArray::new_scalar(1, Some("A")))
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, None::<&str>) as &dyn Array
+        );
+    }
+
+    #[test]
+    fn test_rpad() {
+        assert_eq!(
+            &*RPAD
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abc"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(6))),
+                    Arc::new(StringArray::new_scalar(1, Some("0")))
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("abc000")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*RPAD
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abc"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(2))),
+                    Arc::new(StringArray::new_scalar(1, Some("0")))
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("ab")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*RPAD
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abc"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(0))),
+                    Arc::new(StringArray::new_scalar(1, Some("0")))
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*RPAD
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abc"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(-2))),
+                    Arc::new(StringArray::new_scalar(1, Some("0")))
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, None::<&str>) as &dyn Array
+        );
+
+        assert_eq!(
+            &*RPAD
                 .function_type
                 .call_stateless_fun(&[
                     Arc::new(StringArray::new_scalar(1, Some("abc"))),
