@@ -13,7 +13,7 @@ use crate::expr::signature::Signature;
 pub const CHR: Function = Function {
     namespace: None,
     name: "chr",
-    signature: &Signature::Uniform(1, &[DataType::Int64]),
+    signature: &Signature::Exact(&[DataType::Int64]),
     return_type: |_| DataType::String,
     function_type: FunctionType::Stateless(|args| {
         let array = args[0].downcast_ref::<Int64Array>();
@@ -188,69 +188,77 @@ pub const INSTR: Function = Function {
             .zip(occurrence)
         {
             match (string, substring, position, occurrence) {
-                (Some(string), Some(substring), None, None) => match string.find(substring) {
-                    Some(index) => builder.append(index as i64 + 1),
-                    None => builder.append(0),
-                },
+                (Some(string), Some(substring), None, None) => {
+                    builder.append_opt(string.find(substring).map(|x| x as i64))
+                }
                 (Some(string), Some(substring), Some(position), None) => {
-                    if position > 0 {
+                    if position >= 0 {
                         if position as usize <= string.len() {
-                            builder.append(
+                            builder.append_opt(
                                 string[position as usize..]
                                     .find(substring)
-                                    .map(|x| x as i64 + position + 1)
-                                    .unwrap_or_default(),
+                                    .map(|x| x as i64 + position),
                             );
                         } else {
-                            builder.append(0);
+                            builder.append_null();
                         }
                     } else {
-                        if (position.abs() as usize) <= string.len() {
-                            builder.append(
-                                string[..(string.len() as i64 + position) as usize]
+                        let position = -position as usize - 1;
+                        if position <= string.len() {
+                            builder.append_opt(
+                                string[..string.len() - position]
                                     .rfind(substring)
-                                    .map(|x| x as i64 + 1)
-                                    .unwrap_or_default(),
+                                    .map(|x| x as i64),
                             );
                         } else {
-                            builder.append(0);
+                            builder.append_null();
                         }
                     }
                 }
-                (Some(mut string), Some(substring), Some(position), Some(occurrence)) => {
-                    if position > 0 {
+                (Some(string), Some(substring), Some(mut position), Some(occurrence)) => {
+                    if position >= 0 {
                         if position as usize <= string.len() {
-                            let mut p = 0;
-                            for _ in 1..occurrence {
-                                p = string[position as usize..]
+                            for i in 0..occurrence {
+                                match string[position as usize..]
                                     .find(substring)
-                                    .map(|x| x as i64 + position + 1)
-                                    .unwrap_or_default();
-                                if p == 0 {
-                                    break;
+                                    .map(|x| x as i64 + position)
+                                {
+                                    Some(idx) => {
+                                        if i == occurrence - 1 {
+                                            builder.append(idx);
+                                        } else {
+                                            position = idx + 1;
+                                        }
+                                    }
+                                    None => {
+                                        builder.append_null();
+                                        break;
+                                    }
                                 }
-                                string = &string[p as usize - 1..];
                             }
-                            builder.append(p);
                         } else {
-                            builder.append(0);
+                            builder.append_null();
                         }
                     } else {
-                        if (position.abs() as usize) <= string.len() {
-                            let mut p = 0;
-                            for _ in 1..occurrence {
-                                p = string[..(string.len() as i64 + position) as usize]
-                                    .rfind(substring)
-                                    .map(|x| x as i64 + position + 1)
-                                    .unwrap_or_default();
-                                if p == 0 {
-                                    break;
+                        let mut position = string.len() - (position.abs() as usize - 1);
+                        if position <= string.len() {
+                            for i in 0..occurrence {
+                                match string[..position].rfind(substring).map(|x| x as i64) {
+                                    Some(idx) => {
+                                        if i == occurrence - 1 {
+                                            builder.append(idx);
+                                        } else {
+                                            position = idx as usize;
+                                        }
+                                    }
+                                    None => {
+                                        builder.append_null();
+                                        break;
+                                    }
                                 }
-                                string = &string[..p as usize - 1];
                             }
-                            builder.append(p);
                         } else {
-                            builder.append(0);
+                            builder.append_null();
                         }
                     }
                 }
@@ -430,24 +438,22 @@ pub const SUBSTRING: Function = Function {
 
         for ((value, pos), length) in array.iter_opt().zip(pos.iter_opt()).zip(length) {
             match (value, pos, length) {
-                (Some(value), Some(mut pos), Some(length)) => {
-                    if pos <= 0 || length < 0 {
+                (Some(value), Some(pos), Some(length)) => {
+                    if pos < 0 || length < 0 {
                         builder.append_null();
                         continue;
                     }
-                    pos -= 1;
                     if (pos as usize) <= value.len() && ((pos + length) as usize) <= value.len() {
                         builder.append(&value[pos as usize..(pos + length) as usize]);
                     } else {
                         builder.append_null();
                     }
                 }
-                (Some(value), Some(mut pos), None) => {
-                    if pos <= 0 {
+                (Some(value), Some(pos), None) => {
+                    if pos < 0 {
                         builder.append_null();
                         continue;
                     }
-                    pos -= 1;
                     if (pos as usize) <= value.len() {
                         builder.append(&value[pos as usize..]);
                     } else {
@@ -687,6 +693,18 @@ mod tests {
                 .unwrap(),
             &StringArray::new_scalar(1, Some("YWJj")) as &dyn Array
         );
+
+        assert_eq!(
+            &*ENCODE
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, None::<&str>)),
+                    Arc::new(StringArray::new_scalar(1, Some("utf8"))),
+                    Arc::new(StringArray::new_scalar(1, Some("hex"))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, None::<&str>) as &dyn Array
+        );
     }
 
     #[test]
@@ -699,7 +717,7 @@ mod tests {
                     Arc::new(StringArray::new_scalar(1, Some("ca"))),
                 ])
                 .unwrap(),
-            &Int64Array::new_scalar(1, Some(3)) as &dyn Array
+            &Int64Array::new_scalar(1, Some(2)) as &dyn Array
         );
 
         assert_eq!(
@@ -708,6 +726,30 @@ mod tests {
                 .call_stateless_fun(&[
                     Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
                     Arc::new(StringArray::new_scalar(1, Some("de"))),
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, None) as &dyn Array
+        );
+
+        assert_eq!(
+            &*INSTR
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
+                    Arc::new(StringArray::new_scalar(1, Some("bc"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(3))),
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, Some(4)) as &dyn Array
+        );
+
+        assert_eq!(
+            &*INSTR
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
+                    Arc::new(StringArray::new_scalar(1, Some("ab"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(0))),
                 ])
                 .unwrap(),
             &Int64Array::new_scalar(1, Some(0)) as &dyn Array
@@ -722,7 +764,7 @@ mod tests {
                     Arc::new(Int64Array::new_scalar(1, Some(3))),
                 ])
                 .unwrap(),
-            &Int64Array::new_scalar(1, Some(5)) as &dyn Array
+            &Int64Array::new_scalar(1, Some(4)) as &dyn Array
         );
 
         assert_eq!(
@@ -734,45 +776,7 @@ mod tests {
                     Arc::new(Int64Array::new_scalar(1, Some(3))),
                 ])
                 .unwrap(),
-            &Int64Array::new_scalar(1, Some(0)) as &dyn Array
-        );
-
-        assert_eq!(
-            &*INSTR
-                .function_type
-                .call_stateless_fun(&[
-                    Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
-                    Arc::new(StringArray::new_scalar(1, Some("a"))),
-                    Arc::new(Int64Array::new_scalar(1, Some(3))),
-                    Arc::new(Int64Array::new_scalar(1, Some(2))),
-                ])
-                .unwrap(),
-            &Int64Array::new_scalar(1, Some(4)) as &dyn Array
-        );
-
-        assert_eq!(
-            &*INSTR
-                .function_type
-                .call_stateless_fun(&[
-                    Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
-                    Arc::new(StringArray::new_scalar(1, Some("a"))),
-                    Arc::new(Int64Array::new_scalar(1, Some(1))),
-                    Arc::new(Int64Array::new_scalar(1, Some(3))),
-                ])
-                .unwrap(),
-            &Int64Array::new_scalar(1, Some(0)) as &dyn Array
-        );
-
-        assert_eq!(
-            &*INSTR
-                .function_type
-                .call_stateless_fun(&[
-                    Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
-                    Arc::new(StringArray::new_scalar(1, Some("a"))),
-                    Arc::new(Int64Array::new_scalar(1, Some(0))),
-                ])
-                .unwrap(),
-            &Int64Array::new_scalar(1, Some(4)) as &dyn Array
+            &Int64Array::new_scalar(1, None) as &dyn Array
         );
 
         assert_eq!(
@@ -784,7 +788,7 @@ mod tests {
                     Arc::new(Int64Array::new_scalar(1, Some(-3))),
                 ])
                 .unwrap(),
-            &Int64Array::new_scalar(1, Some(1)) as &dyn Array
+            &Int64Array::new_scalar(1, Some(3)) as &dyn Array
         );
 
         assert_eq!(
@@ -792,12 +796,156 @@ mod tests {
                 .function_type
                 .call_stateless_fun(&[
                     Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
-                    Arc::new(StringArray::new_scalar(1, Some("b"))),
+                    Arc::new(StringArray::new_scalar(1, Some("c"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(-2))),
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, Some(2)) as &dyn Array
+        );
+
+        assert_eq!(
+            &*INSTR
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
+                    Arc::new(StringArray::new_scalar(1, Some("c"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(-5))),
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, None) as &dyn Array
+        );
+
+        assert_eq!(
+            &*INSTR
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
+                    Arc::new(StringArray::new_scalar(1, Some("a"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(0))),
+                    Arc::new(Int64Array::new_scalar(1, Some(2))),
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, Some(3)) as &dyn Array
+        );
+
+        assert_eq!(
+            &*INSTR
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
+                    Arc::new(StringArray::new_scalar(1, Some("a"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(2))),
+                    Arc::new(Int64Array::new_scalar(1, Some(2))),
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, None) as &dyn Array
+        );
+
+        assert_eq!(
+            &*INSTR
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
+                    Arc::new(StringArray::new_scalar(1, Some("c"))),
                     Arc::new(Int64Array::new_scalar(1, Some(-1))),
                     Arc::new(Int64Array::new_scalar(1, Some(2))),
                 ])
                 .unwrap(),
             &Int64Array::new_scalar(1, Some(2)) as &dyn Array
+        );
+
+        assert_eq!(
+            &*INSTR
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
+                    Arc::new(StringArray::new_scalar(1, Some("c"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(-1))),
+                    Arc::new(Int64Array::new_scalar(1, Some(1))),
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, Some(5)) as &dyn Array
+        );
+
+        assert_eq!(
+            &*INSTR
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("abcabc"))),
+                    Arc::new(StringArray::new_scalar(1, Some("c"))),
+                    Arc::new(Int64Array::new_scalar(1, Some(-1))),
+                    Arc::new(Int64Array::new_scalar(1, Some(3))),
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, None) as &dyn Array
+        );
+
+        assert_eq!(
+            &*INSTR
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, None::<&str>)),
+                    Arc::new(StringArray::new_scalar(1, Some("ca"))),
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, None) as &dyn Array
+        );
+    }
+
+    #[test]
+    fn test_lcase() {
+        assert_eq!(
+            &*LCASE
+                .function_type
+                .call_stateless_fun(&[Arc::new(StringArray::new_scalar(1, Some("aBc")))])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("abc")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*LCASE
+                .function_type
+                .call_stateless_fun(&[Arc::new(StringArray::new_scalar(1, None::<&str>))])
+                .unwrap(),
+            &StringArray::new_scalar(1, None::<&str>) as &dyn Array
+        );
+    }
+
+    #[test]
+    fn test_ucase() {
+        assert_eq!(
+            &*UCASE
+                .function_type
+                .call_stateless_fun(&[Arc::new(StringArray::new_scalar(1, Some("aBc")))])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("ABC")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*UCASE
+                .function_type
+                .call_stateless_fun(&[Arc::new(StringArray::new_scalar(1, None::<&str>))])
+                .unwrap(),
+            &StringArray::new_scalar(1, None::<&str>) as &dyn Array
+        );
+    }
+
+    #[test]
+    fn test_len() {
+        assert_eq!(
+            &*LEN
+                .function_type
+                .call_stateless_fun(&[Arc::new(StringArray::new_scalar(1, Some("aBc")))])
+                .unwrap(),
+            &Int64Array::new_scalar(1, Some(3)) as &dyn Array
+        );
+
+        assert_eq!(
+            &*LEN
+                .function_type
+                .call_stateless_fun(&[Arc::new(StringArray::new_scalar(1, None::<&str>))])
+                .unwrap(),
+            &Int64Array::new_scalar(1, None) as &dyn Array
         );
     }
 }

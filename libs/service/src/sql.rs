@@ -91,16 +91,16 @@ pub struct StmtSelect {
 
 #[derive(Debug, PartialEq)]
 pub enum Stmt {
-    CreateSource(StmtCreateSource),
-    CreateStream(StmtCreateStream),
-    CreateSink(StmtCreateSink),
-    DeleteSource(StmtDeleteSource),
-    DeleteStream(StmtDeleteStream),
-    DeleteSink(StmtDeleteSink),
-    StartStream(StmtStartStream),
-    StopStream(StmtStopStream),
-    Show(StmtShow),
-    Select(StmtSelect),
+    CreateSource(Box<StmtCreateSource>),
+    CreateStream(Box<StmtCreateStream>),
+    CreateSink(Box<StmtCreateSink>),
+    DeleteSource(Box<StmtDeleteSource>),
+    DeleteStream(Box<StmtDeleteStream>),
+    DeleteSink(Box<StmtDeleteSink>),
+    StartStream(Box<StmtStartStream>),
+    StopStream(Box<StmtStopStream>),
+    Show(Box<StmtShow>),
+    Select(Box<StmtSelect>),
 }
 
 fn timezone(input: &str) -> IResult<&str, Tz> {
@@ -324,17 +324,35 @@ pub fn stmt(input: &str) -> IResult<&str, Stmt> {
         "stmt",
         terminated(
             alt((
-                map(delimited(sp, stmt_create_source, sp), Stmt::CreateSource),
-                map(delimited(sp, stmt_create_stream, sp), Stmt::CreateStream),
-                map(delimited(sp, stmt_create_sink, sp), Stmt::CreateSink),
-                map(delimited(sp, stmt_delete_source, sp), Stmt::DeleteSource),
-                map(delimited(sp, stmt_delete_stream, sp), Stmt::DeleteStream),
-                map(delimited(sp, stmt_delete_sink, sp), Stmt::DeleteSink),
-                map(delimited(sp, stmt_start_stream, sp), Stmt::StartStream),
-                map(delimited(sp, stmt_stop_stream, sp), Stmt::StopStream),
-                map(delimited(sp, stmt_show_stream, sp), Stmt::Show),
+                map(delimited(sp, stmt_create_source, sp), |stmt| {
+                    Stmt::CreateSource(Box::new(stmt))
+                }),
+                map(delimited(sp, stmt_create_stream, sp), |stmt| {
+                    Stmt::CreateStream(Box::new(stmt))
+                }),
+                map(delimited(sp, stmt_create_sink, sp), |stmt| {
+                    Stmt::CreateSink(Box::new(stmt))
+                }),
+                map(delimited(sp, stmt_delete_source, sp), |stmt| {
+                    Stmt::DeleteSource(Box::new(stmt))
+                }),
+                map(delimited(sp, stmt_delete_stream, sp), |stmt| {
+                    Stmt::DeleteStream(Box::new(stmt))
+                }),
+                map(delimited(sp, stmt_delete_sink, sp), |stmt| {
+                    Stmt::DeleteSink(Box::new(stmt))
+                }),
+                map(delimited(sp, stmt_start_stream, sp), |stmt| {
+                    Stmt::StartStream(Box::new(stmt))
+                }),
+                map(delimited(sp, stmt_stop_stream, sp), |stmt| {
+                    Stmt::StopStream(Box::new(stmt))
+                }),
+                map(delimited(sp, stmt_show_stream, sp), |stmt| {
+                    Stmt::Show(Box::new(stmt))
+                }),
                 map(delimited(sp, select, sp), |select| {
-                    Stmt::Select(StmtSelect { select })
+                    Stmt::Select(Box::new(StmtSelect { select }))
                 }),
             )),
             eof,

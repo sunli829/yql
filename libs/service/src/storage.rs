@@ -31,9 +31,9 @@ pub struct StreamDefinition {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Definition {
-    Source(SourceDefinition),
-    Stream(StreamDefinition),
-    Sink(SinkDefinition),
+    Source(Box<SourceDefinition>),
+    Stream(Box<StreamDefinition>),
+    Sink(Box<SinkDefinition>),
 }
 
 #[derive(Debug, Serialize, Deserialize, Display)]

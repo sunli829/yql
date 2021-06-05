@@ -60,7 +60,7 @@ fn source_to_physical(ctx: &mut Context, source: LogicalSourcePlan) -> Result<Ph
         schema,
         source_provider: source.source_provider,
         time_expr: match source.time_expr {
-            Some(expr) => Some(expr.into_physical(source_schema.clone())?),
+            Some(expr) => Some(expr.into_physical(source_schema)?),
             None => None,
         },
     }))

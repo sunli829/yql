@@ -143,31 +143,31 @@ impl Service {
 
         match stmt {
             Stmt::CreateSource(stmt) => Ok(ExecuteResult::DataSet(
-                self.execute_create_source(stmt).await?,
+                self.execute_create_source(*stmt).await?,
             )),
             Stmt::CreateStream(stmt) => Ok(ExecuteResult::DataSet(
-                self.execute_create_stream(stmt).await?,
+                self.execute_create_stream(*stmt).await?,
             )),
             Stmt::CreateSink(stmt) => Ok(ExecuteResult::DataSet(
-                self.execute_create_sink(stmt).await?,
+                self.execute_create_sink(*stmt).await?,
             )),
             Stmt::DeleteSource(stmt) => Ok(ExecuteResult::DataSet(
-                self.execute_delete_source(stmt).await?,
+                self.execute_delete_source(*stmt).await?,
             )),
             Stmt::DeleteStream(stmt) => Ok(ExecuteResult::DataSet(
-                self.execute_delete_stream(stmt).await?,
+                self.execute_delete_stream(*stmt).await?,
             )),
             Stmt::DeleteSink(stmt) => Ok(ExecuteResult::DataSet(
-                self.execute_delete_sink(stmt).await?,
+                self.execute_delete_sink(*stmt).await?,
             )),
             Stmt::StartStream(stmt) => Ok(ExecuteResult::DataSet(
-                self.execute_start_stream(stmt).await?,
+                self.execute_start_stream(*stmt).await?,
             )),
             Stmt::StopStream(stmt) => Ok(ExecuteResult::DataSet(
-                self.execute_stop_stream(stmt).await?,
+                self.execute_stop_stream(*stmt).await?,
             )),
-            Stmt::Show(stmt) => Ok(ExecuteResult::DataSet(self.execute_show(stmt).await?)),
-            Stmt::Select(stmt) => Ok(ExecuteResult::ExecStream(self.execute_select(stmt).await?)),
+            Stmt::Show(stmt) => Ok(ExecuteResult::DataSet(self.execute_show(*stmt).await?)),
+            Stmt::Select(stmt) => Ok(ExecuteResult::ExecStream(self.execute_select(*stmt).await?)),
         }
     }
 
@@ -180,12 +180,12 @@ impl Service {
 
         inner
             .storage
-            .create_definition(Definition::Source(SourceDefinition {
+            .create_definition(Definition::Source(Box::new(SourceDefinition {
                 name: stmt.name,
                 schema: Arc::new(Schema::try_new(stmt.fields)?),
                 uri: stmt.uri,
                 time_expr: stmt.time,
-            }))?;
+            })))?;
 
         create_action_result_dataset("Create Source", true)
     }
@@ -199,11 +199,11 @@ impl Service {
 
         inner
             .storage
-            .create_definition(Definition::Stream(StreamDefinition {
+            .create_definition(Definition::Stream(Box::new(StreamDefinition {
                 name: stmt.name,
                 select: stmt.select,
                 to: stmt.to,
-            }))?;
+            })))?;
 
         create_action_result_dataset("Create Stream", true)
     }
@@ -217,10 +217,10 @@ impl Service {
 
         inner
             .storage
-            .create_definition(Definition::Sink(SinkDefinition {
+            .create_definition(Definition::Sink(Box::new(SinkDefinition {
                 name: stmt.name,
                 uri: stmt.uri,
-            }))?;
+            })))?;
 
         create_action_result_dataset("Create Sink", true)
     }

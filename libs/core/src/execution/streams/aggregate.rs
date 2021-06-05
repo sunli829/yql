@@ -378,7 +378,7 @@ impl Stream for AggregateStream {
                     Ok(new_datasets) if !new_datasets.is_empty() => {
                         let mut iter = new_datasets.into_iter();
                         let new_dataset = iter.next().unwrap();
-                        self.new_datasets.extend(iter.map(|dataset| dataset));
+                        self.new_datasets.extend(iter);
                         return Poll::Ready(Some(Ok(new_dataset)));
                     }
                     Ok(_) => {}
