@@ -116,3 +116,111 @@ pub const IFNULL: Function = Function {
         }
     }),
 };
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::array::{Array, Int64Array};
+
+    #[test]
+    fn test_coalesce() {
+        assert_eq!(
+            &*COALESCE
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(Int64Array::new_scalar(1, None)),
+                    Arc::new(Int64Array::new_scalar(1, None)),
+                    Arc::new(Int64Array::new_scalar(1, Some(88))),
+                    Arc::new(Int64Array::new_scalar(1, None))
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, Some(88)) as &dyn Array
+        );
+
+        assert_eq!(
+            &*COALESCE
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(Int64Array::new_scalar(1, None)),
+                    Arc::new(Int64Array::new_scalar(1, None)),
+                    Arc::new(Int64Array::new_scalar(1, None)),
+                    Arc::new(Int64Array::new_scalar(1, None))
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, None) as &dyn Array
+        );
+
+        assert_eq!(
+            &*COALESCE
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, None::<&str>)),
+                    Arc::new(StringArray::new_scalar(1, None::<&str>)),
+                    Arc::new(StringArray::new_scalar(1, Some("haha"))),
+                    Arc::new(StringArray::new_scalar(1, None::<&str>))
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("haha")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*COALESCE
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, None::<&str>)),
+                    Arc::new(StringArray::new_scalar(1, None::<&str>)),
+                    Arc::new(StringArray::new_scalar(1, None::<&str>)),
+                    Arc::new(StringArray::new_scalar(1, None::<&str>))
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, None::<&str>) as &dyn Array
+        );
+    }
+
+    #[test]
+    fn test_ifnull() {
+        assert_eq!(
+            &*IFNULL
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(Int64Array::new_scalar(1, Some(33))),
+                    Arc::new(Int64Array::new_scalar(1, Some(44))),
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, Some(33)) as &dyn Array
+        );
+
+        assert_eq!(
+            &*IFNULL
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(Int64Array::new_scalar(1, None)),
+                    Arc::new(Int64Array::new_scalar(1, Some(44))),
+                ])
+                .unwrap(),
+            &Int64Array::new_scalar(1, Some(44)) as &dyn Array
+        );
+
+        assert_eq!(
+            &*IFNULL
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, Some("a"))),
+                    Arc::new(StringArray::new_scalar(1, Some("b"))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("a")) as &dyn Array
+        );
+
+        assert_eq!(
+            &*IFNULL
+                .function_type
+                .call_stateless_fun(&[
+                    Arc::new(StringArray::new_scalar(1, None::<&str>)),
+                    Arc::new(StringArray::new_scalar(1, Some("b"))),
+                ])
+                .unwrap(),
+            &StringArray::new_scalar(1, Some("b")) as &dyn Array
+        );
+    }
+}
