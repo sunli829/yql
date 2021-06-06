@@ -5,6 +5,7 @@ mod f_stat;
 mod math;
 mod nulls;
 mod string;
+mod time;
 mod utils;
 
 use aggregate::*;
@@ -14,6 +15,7 @@ use f_stat::*;
 use math::*;
 use nulls::*;
 use string::*;
+use time::*;
 
 use crate::expr::func::Function;
 
@@ -30,6 +32,9 @@ const FUNCS: &[Function] = &[
     
     // nulls
     COALESCE, IFNULL,
+
+    // time
+    PARSE_TIMESTAMP, FORMAT_TIMESTAMP,
     
     // f.ref
     F_ALL, F_ANY, F_BARSLAST, F_BARSSINCE, F_COUNT, F_DMA, F_EMA, F_FILTER, F_HHV, F_LLV, 
