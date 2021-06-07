@@ -70,13 +70,17 @@ impl yql_protocol::yql_server::Yql for RpcYqlService {
                                     }
                                 };
 
-                                tx.send(Ok(ExecuteResponse {
-                                    item: Some(execute_response::Item::Dataset(
-                                        execute_response::DataSet { dataset: data },
-                                    )),
-                                }))
-                                .await
-                                .ok();
+                                if tx
+                                    .send(Ok(ExecuteResponse {
+                                        item: Some(execute_response::Item::Dataset(
+                                            execute_response::DataSet { dataset: data },
+                                        )),
+                                    }))
+                                    .await
+                                    .is_err()
+                                {
+                                    return;
+                                };
                             }
                             ExecuteStreamItem::Metrics(metrics) => {
                                 tx.send(Ok(ExecuteResponse {
