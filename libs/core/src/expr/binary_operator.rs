@@ -524,8 +524,6 @@ impl BinaryOperator {
                     Ok(DataType::Float64)
                 } else if left.is_integer() && right.is_integer() {
                     Ok(DataType::Int64)
-                } else if left.is_timestamp() && right.is_integer() {
-                    Ok(DataType::Timestamp(None))
                 } else {
                     Err(binary_error(*self, left, right))
                 }

@@ -124,6 +124,7 @@ pub fn literal(input: &str) -> IResult<&str, Literal> {
         alt((
             map(boolean, Literal::Boolean),
             map(float, Literal::Float),
+            map(duration, Literal::Int),
             map(integer, Literal::Int),
             map(string, Literal::String),
         )),
@@ -338,10 +339,15 @@ fn group_by(input: &str) -> IResult<&str, GroupBy> {
 }
 
 fn duration(input: &str) -> IResult<&str, i64> {
-    let seconds = map(pair(integer, tag_no_case("s")), |(n, _)| n * 1000);
-    let milliseconds = map(pair(integer, tag_no_case("ms")), |(n, _)| n);
-    let minutes = map(pair(integer, tag_no_case("m")), |(n, _)| n * 1000 * 60);
-    context("duration", alt((seconds, milliseconds, minutes)))(input)
+    let timeunit = alt((
+        value(1000i64, tag_no_case("seconds")),
+        value(1, tag_no_case("milliseconds")),
+        value(1000 * 60, tag_no_case("minutes")),
+    ));
+    context(
+        "duration",
+        map(tuple((integer, sp, timeunit)), |(n, _, unit)| n * unit),
+    )(input)
 }
 
 fn window(input: &str) -> IResult<&str, Window> {

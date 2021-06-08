@@ -6,7 +6,8 @@ use chrono_tz::Tz;
 use itertools::Either;
 
 use crate::array::{
-    ArrayExt, ArrayRef, DataType, StringArray, StringBuilder, TimestampArray, TimestampBuilder,
+    ArrayExt, ArrayRef, DataType, Int64Array, StringArray, StringBuilder, TimestampArray,
+    TimestampBuilder,
 };
 use crate::expr::func::{Function, FunctionType};
 use crate::expr::signature::Signature;
@@ -84,6 +85,50 @@ pub const FORMAT_TIMESTAMP: Function = Function {
 
             if let (Some(value), Some(fmt)) = (value, fmt) {
                 builder.append(&format!("{}", tz.timestamp_millis(value).format(fmt)));
+            } else {
+                builder.append_null();
+            }
+        }
+
+        Ok(Arc::new(builder.finish()))
+    }),
+};
+
+pub const TIMESTAMP_ADD: Function = Function {
+    namespace: None,
+    name: "timestamp_add",
+    signature: &Signature::Exact(&[DataType::Timestamp(None), DataType::Int64]),
+    return_type: |args| args[0],
+    function_type: FunctionType::Stateless(|args| {
+        let array = args[0].downcast_ref::<TimestampArray>();
+        let n = args[1].downcast_ref::<Int64Array>();
+        let mut builder = TimestampBuilder::with_capacity(args[0].len());
+
+        for (value, n) in array.iter_opt().zip(n.iter_opt()) {
+            if let (Some(value), Some(n)) = (value, n) {
+                builder.append_opt(value.checked_add(n));
+            } else {
+                builder.append_null();
+            }
+        }
+
+        Ok(Arc::new(builder.finish()))
+    }),
+};
+
+pub const TIMESTAMP_SUB: Function = Function {
+    namespace: None,
+    name: "timestamp_sub",
+    signature: &Signature::Exact(&[DataType::Timestamp(None), DataType::Int64]),
+    return_type: |args| args[0],
+    function_type: FunctionType::Stateless(|args| {
+        let array = args[0].downcast_ref::<TimestampArray>();
+        let n = args[1].downcast_ref::<Int64Array>();
+        let mut builder = TimestampBuilder::with_capacity(args[0].len());
+
+        for (value, n) in array.iter_opt().zip(n.iter_opt()) {
+            if let (Some(value), Some(n)) = (value, n) {
+                builder.append_opt(value.checked_sub(n));
             } else {
                 builder.append_null();
             }

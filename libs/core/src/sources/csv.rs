@@ -9,7 +9,7 @@ use crate::{GenericSourceDataSet, GenericSourceProvider};
 use std::fs::File;
 use std::io::{Cursor, Read};
 
-const DEFAULT_BATCH_SIZE: usize = 10000;
+const DEFAULT_BATCH_SIZE: usize = 1000000;
 
 #[derive(Serialize, Deserialize)]
 pub struct Options {
